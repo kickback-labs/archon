@@ -7,3 +7,4 @@ Tools/technologies used:
 - Shadcn
 - ai-sdk
 - AI elements
+- Better Auth
