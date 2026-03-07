@@ -34,8 +34,18 @@ import {
 } from "@/components/ai-elements/attachments";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { BotIcon, CopyIcon, RefreshCcwIcon } from "lucide-react";
+import { BotIcon, CopyIcon, RefreshCcwIcon, SunIcon, MoonIcon, MonitorIcon } from "lucide-react";
 import { useState, Fragment } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
+import { useSession, signOut } from "@/lib/auth-client";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { usePromptInputAttachments } from "@/components/ai-elements/prompt-input";
 
 const AttachmentsDisplay = () => {
@@ -60,6 +70,9 @@ const AttachmentsDisplay = () => {
 
 export default function Home() {
   const [text, setText] = useState("");
+  const { data: session } = useSession();
+  const router = useRouter();
+  const { setTheme, theme } = useTheme();
 
   const { messages, status, sendMessage, regenerate } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
@@ -84,6 +97,53 @@ export default function Home() {
         <div>
           <h1 className="text-sm font-semibold">Archon</h1>
           <p className="text-xs text-muted-foreground">Cloud Architect AI</p>
+        </div>
+        <div className="ml-auto flex items-center gap-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer">
+              <SunIcon className="size-4 dark:hidden" />
+              <MoonIcon className="size-4 hidden dark:block" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setTheme("light")}>
+                <SunIcon data-icon="inline-start" />
+                Light
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("dark")}>
+                <MoonIcon data-icon="inline-start" />
+                Dark
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("system")}>
+                <MonitorIcon data-icon="inline-start" />
+                System
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {session?.user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="flex h-8 items-center rounded-md px-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer">
+                  {session.user.name}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled>Settings</DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    await signOut();
+                    router.push("/login");
+                  }}
+                >
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Link
+              href="/login"
+              className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Login
+            </Link>
+          )}
         </div>
       </header>
 

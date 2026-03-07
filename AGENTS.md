@@ -8,3 +8,4 @@ Tools/technologies used:
 - ai-sdk
 - AI elements
 - Better Auth
+- Drizzle with PostgreSQL
