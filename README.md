@@ -12,10 +12,10 @@ A cloud architect AI agent chatbot built with Next.js, TypeScript, and the Verce
 pnpm install
 ```
 
-2. Copy `.env.example` to `.env.local` and fill in the values:
+2. Copy `.env.example` to `.env` and fill in the values:
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
 The following variables need to be filled in:
