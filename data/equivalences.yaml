@@ -1,0 +1,1545 @@
+# Cross-provider service equivalences
+#
+# Used by the retrieval pipeline when assembling context, regardless of tier.
+# For every doc entering context (tier-1 injection or tier-2/3 retrieval), the
+# pipeline looks up (provider + service) here and appends a short footer:
+#
+#   > Equivalent to: <other providers' services> (<level> equivalence)
+#   > Note: <note>  ← only present when level is "medium"
+#
+# The lookup is keyed on (provider, service). The pipeline ignores entries
+# whose tier does not match the doc being injected — the tier field is present
+# for transparency and future use (e.g. reranker hints), not for filtering.
+#
+# Equivalence levels:
+#   high   — nearly identical in function, model, and architecture.
+#   medium — same end goal but meaningful architectural differences;
+#            the agent must reason about the trade-offs.
+
+# ─── compute ────────────────────────────────────────────────────────────────
+
+- concept: "Virtual Machine (IaaS)"
+  category: compute
+  equivalence: high
+  members:
+    - provider: AWS
+      service: EC2
+      file: aws/compute/ec2.md
+      tier: 1
+    - provider: Azure
+      service: Virtual Machines
+      file: azure/compute/virtual-machines.md
+      tier: 1
+    - provider: GCP
+      service: Compute Engine
+      file: gcp/compute/compute-engine.md
+      tier: 1
+
+- concept: "Function-as-a-Service (FaaS)"
+  category: compute
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Lambda
+      file: aws/compute/lambda.md
+      tier: 1
+    - provider: Azure
+      service: Azure Functions
+      file: azure/compute/azure-functions.md
+      tier: 1
+    - provider: GCP
+      service: Cloud Functions
+      file: gcp/compute/cloud-functions.md
+      tier: 1
+
+- concept: "Serverless Container Platform"
+  category: compute
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Fargate
+      file: aws/compute/fargate.md
+      tier: 1
+    - provider: Azure
+      service: Container Apps
+      file: azure/compute/container-apps.md
+      tier: 1
+    - provider: GCP
+      service: Cloud Run
+      file: gcp/compute/cloud-run.md
+      tier: 1
+
+- concept: "Managed Kubernetes Service"
+  category: compute
+  equivalence: high
+  members:
+    - provider: AWS
+      service: EKS
+      file: aws/compute/eks.md
+      tier: 1
+    - provider: Azure
+      service: AKS
+      file: azure/compute/aks.md
+      tier: 1
+    - provider: GCP
+      service: GKE
+      file: gcp/compute/gke.md
+      tier: 1
+
+- concept: "Platform-as-a-Service (PaaS) / App Hosting"
+  category: compute
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Elastic Beanstalk
+      file: aws/compute/elastic-beanstalk.md
+      tier: 2
+    - provider: Azure
+      service: App Service
+      file: azure/compute/app-service.md
+      tier: 1
+    - provider: GCP
+      service: App Engine
+      file: gcp/compute/app-engine.md
+      tier: 2
+
+- concept: "Managed Batch Compute"
+  category: compute
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Batch
+      file: aws/compute/batch.md
+      tier: 2
+    - provider: Azure
+      service: Batch
+      file: azure/compute/batch.md
+      tier: 2
+    - provider: GCP
+      service: Cloud Batch
+      file: gcp/compute/batch.md
+      tier: 2
+
+- concept: "VMware Lift-and-Shift"
+  category: compute
+  equivalence: high
+  members:
+    - provider: AWS
+      service: VMware Cloud on AWS
+      file: aws/compute/vmware-cloud-on-aws.md
+      tier: 3
+    - provider: Azure
+      service: Azure VMware Solution
+      file: azure/compute/vmware-solution.md
+      tier: 3
+    - provider: GCP
+      service: VMware Engine
+      file: gcp/compute/vmware-engine.md
+      tier: 3
+
+- concept: "Managed OpenShift"
+  category: compute
+  equivalence: high
+  members:
+    - provider: AWS
+      service: ROSA
+      file: aws/compute/rosa.md
+      tier: 3
+    - provider: Azure
+      service: Azure Red Hat OpenShift
+      file: azure/compute/red-hat-openshift.md
+      tier: 3
+
+# ─── storage ─────────────────────────────────────────────────────────────────
+
+- concept: "Object Storage"
+  category: storage
+  equivalence: high
+  members:
+    - provider: AWS
+      service: S3
+      file: aws/storage/s3.md
+      tier: 1
+    - provider: Azure
+      service: Blob Storage
+      file: azure/storage/blob-storage.md
+      tier: 1
+    - provider: GCP
+      service: Cloud Storage
+      file: gcp/storage/cloud-storage.md
+      tier: 1
+
+- concept: "Block Storage (Managed Disks)"
+  category: storage
+  equivalence: high
+  members:
+    - provider: AWS
+      service: EBS
+      file: aws/storage/ebs.md
+      tier: 1
+    - provider: Azure
+      service: Disk Storage
+      file: azure/storage/disk-storage.md
+      tier: 1
+    - provider: GCP
+      service: Persistent Disk
+      file: gcp/storage/persistent-disk.md
+      tier: 1
+
+- concept: "Managed File Storage (NFS/SMB)"
+  category: storage
+  equivalence: high
+  members:
+    - provider: AWS
+      service: EFS
+      file: aws/storage/efs.md
+      tier: 1
+    - provider: Azure
+      service: Azure Files
+      file: azure/storage/azure-files.md
+      tier: 1
+    - provider: GCP
+      service: Filestore
+      file: gcp/storage/filestore.md
+      tier: 1
+
+- concept: "High-Performance Lustre File Storage"
+  category: storage
+  equivalence: high
+  members:
+    - provider: AWS
+      service: FSx for Lustre
+      file: aws/storage/fsx-lustre.md
+      tier: 2
+    - provider: Azure
+      service: Azure Managed Lustre
+      file: azure/storage/managed-lustre.md
+      tier: 3
+    - provider: GCP
+      service: Google Cloud Managed Lustre
+      file: gcp/storage/managed-lustre.md
+      tier: 3
+
+- concept: "NetApp Enterprise File Storage"
+  category: storage
+  equivalence: high
+  members:
+    - provider: AWS
+      service: FSx for NetApp ONTAP
+      file: aws/storage/fsx-netapp-ontap.md
+      tier: 3
+    - provider: Azure
+      service: Azure NetApp Files
+      file: azure/storage/netapp-files.md
+      tier: 2
+    - provider: GCP
+      service: Google Cloud NetApp Volumes
+      file: gcp/storage/netapp-volumes.md
+      tier: 3
+
+# ─── database ─────────────────────────────────────────────────────────────────
+
+- concept: "Managed Relational Database (multi-engine)"
+  category: database
+  equivalence: medium
+  note: "AWS RDS and GCP Cloud SQL are multi-engine managed relational services. Azure does not have a single equivalent; it provides separate managed services per engine (Azure SQL Database, Azure Database for PostgreSQL, Azure Database for MySQL). Include all Azure database services individually."
+  members:
+    - provider: AWS
+      service: RDS
+      file: aws/database/rds.md
+      tier: 1
+    - provider: GCP
+      service: Cloud SQL
+      file: gcp/database/cloud-sql.md
+      tier: 1
+
+- concept: "Cloud-Native High-Performance Relational Database"
+  category: database
+  equivalence: medium
+  note: "Aurora and AlloyDB are both cloud-native re-implementations of relational engines with proprietary storage layers. Aurora supports MySQL and PostgreSQL; AlloyDB is PostgreSQL-only. Azure has no direct equivalent."
+  members:
+    - provider: AWS
+      service: Aurora
+      file: aws/database/aurora.md
+      tier: 1
+    - provider: GCP
+      service: AlloyDB for PostgreSQL
+      file: gcp/database/alloydb.md
+      tier: 2
+
+- concept: "Managed Data Warehouse"
+  category: database
+  equivalence: medium
+  note: "Redshift is a provisioned columnar cluster (serverless option available). Synapse Analytics combines data warehouse and Spark. BigQuery is fully serverless with per-query pricing. Operational model differs significantly."
+  members:
+    - provider: AWS
+      service: Redshift
+      file: aws/database/redshift.md
+      tier: 1
+    - provider: Azure
+      service: Synapse Analytics
+      file: azure/database/synapse-analytics.md
+      tier: 1
+    - provider: GCP
+      service: BigQuery
+      file: gcp/analytics/bigquery.md
+      tier: 1
+
+- concept: "NoSQL Key-Value / Document (Global Scale)"
+  category: database
+  equivalence: medium
+  note: "DynamoDB is a single-model key-value/document store. Cosmos DB is multi-API (SQL, MongoDB, Cassandra, Gremlin, Table) with tunable consistency. Firestore is a document store with real-time sync and hierarchical data model. All differ in API surface, consistency options, and multi-model support."
+  members:
+    - provider: AWS
+      service: DynamoDB
+      file: aws/database/dynamodb.md
+      tier: 1
+    - provider: Azure
+      service: Cosmos DB
+      file: azure/database/cosmos-db.md
+      tier: 1
+    - provider: GCP
+      service: Firestore
+      file: gcp/database/firestore.md
+      tier: 1
+
+- concept: "In-Memory Cache (Redis)"
+  category: database
+  equivalence: high
+  members:
+    - provider: AWS
+      service: ElastiCache
+      file: aws/database/elasticache.md
+      tier: 1
+    - provider: Azure
+      service: Azure Cache for Redis
+      file: azure/database/azure-cache-redis.md
+      tier: 1
+    - provider: GCP
+      service: Memorystore
+      file: gcp/database/memorystore.md
+      tier: 1
+
+- concept: "Wide-Column (Cassandra-Compatible)"
+  category: database
+  equivalence: medium
+  note: "Keyspaces and Azure Managed Cassandra are both CQL-compatible managed Cassandra services. Bigtable uses its own API (with a Cassandra adapter) and differs in data model and operational characteristics."
+  members:
+    - provider: AWS
+      service: Keyspaces
+      file: aws/database/keyspaces.md
+      tier: 2
+    - provider: Azure
+      service: Managed Instance for Apache Cassandra
+      file: azure/database/managed-instance-apache-cassandra.md
+      tier: 3
+    - provider: GCP
+      service: Cloud Bigtable
+      file: gcp/database/bigtable.md
+      tier: 1
+
+- concept: "Persistent In-Memory Database (Redis-compatible)"
+  category: database
+  equivalence: medium
+  note: "MemoryDB provides durable, multi-AZ Redis with primary-database semantics. Azure Cache for Redis Enterprise tier supports persistence and clustering but is positioned as a cache. GCP has no direct equivalent."
+  members:
+    - provider: AWS
+      service: MemoryDB for Redis
+      file: aws/database/memorydb.md
+      tier: 2
+    - provider: Azure
+      service: Azure Cache for Redis (Enterprise tier)
+      file: azure/database/azure-cache-redis.md
+      tier: 1
+
+- concept: "Managed Document Database (MongoDB-compatible)"
+  category: database
+  equivalence: high
+  members:
+    - provider: AWS
+      service: DocumentDB
+      file: aws/database/documentdb.md
+      tier: 2
+    - provider: Azure
+      service: Cosmos DB (MongoDB API)
+      file: azure/database/cosmos-db.md
+      tier: 1
+
+- concept: "Graph Database"
+  category: database
+  equivalence: medium
+  note: "Neptune is a dedicated graph database supporting Gremlin and SPARQL. Cosmos DB Gremlin is one of many APIs on a shared multi-model engine. GCP has no dedicated managed graph database service."
+  members:
+    - provider: AWS
+      service: Neptune
+      file: aws/database/neptune.md
+      tier: 2
+    - provider: Azure
+      service: Cosmos DB (Gremlin API)
+      file: azure/database/cosmos-db.md
+      tier: 1
+
+- concept: "Ledger / Immutable Audit Database"
+  category: database
+  equivalence: medium
+  note: "QLDB is a document-oriented ledger with a verifiable transaction log. Azure Confidential Ledger uses confidential computing enclaves for tamper-proof records. GCP has no direct equivalent."
+  members:
+    - provider: AWS
+      service: QLDB
+      file: aws/database/qldb.md
+      tier: 3
+    - provider: Azure
+      service: Azure Confidential Ledger
+      file: azure/database/confidential-ledger.md
+      tier: 3
+
+# ─── networking ──────────────────────────────────────────────────────────────
+
+- concept: "Virtual Private Network (core isolation)"
+  category: networking
+  equivalence: high
+  members:
+    - provider: AWS
+      service: VPC
+      file: aws/networking/vpc.md
+      tier: 1
+    - provider: Azure
+      service: Virtual Network (VNet)
+      file: azure/networking/virtual-network.md
+      tier: 1
+    - provider: GCP
+      service: VPC
+      file: gcp/networking/vpc.md
+      tier: 1
+
+- concept: "DNS"
+  category: networking
+  equivalence: medium
+  note: "Route 53 combines authoritative DNS, health checking, and traffic routing/failover in one product. Azure DNS and Cloud DNS are authoritative-only; routing and failover require Traffic Manager (Azure) or Cloud Load Balancing policies (GCP)."
+  members:
+    - provider: AWS
+      service: Route 53
+      file: aws/networking/route53.md
+      tier: 1
+    - provider: Azure
+      service: Azure DNS
+      file: azure/networking/azure-dns.md
+      tier: 1
+    - provider: GCP
+      service: Cloud DNS
+      file: gcp/networking/cloud-dns.md
+      tier: 1
+
+- concept: "Content Delivery Network (CDN)"
+  category: networking
+  equivalence: high
+  members:
+    - provider: AWS
+      service: CloudFront
+      file: aws/networking/cloudfront.md
+      tier: 1
+    - provider: Azure
+      service: Azure CDN
+      file: azure/networking/azure-cdn.md
+      tier: 2
+    - provider: GCP
+      service: Cloud CDN
+      file: gcp/networking/cloud-cdn.md
+      tier: 2
+
+- concept: "Global Load Balancer / Anycast Accelerator"
+  category: networking
+  equivalence: medium
+  note: "Global Accelerator uses Anycast for TCP/UDP acceleration. Azure Front Door is a Layer-7 global load balancer with WAF and CDN. GCP Cloud Load Balancing is fully distributed with no regional hops. Differ in layer and feature set."
+  members:
+    - provider: AWS
+      service: Global Accelerator
+      file: aws/networking/global-accelerator.md
+      tier: 2
+    - provider: Azure
+      service: Front Door
+      file: azure/networking/front-door.md
+      tier: 2
+    - provider: GCP
+      service: Cloud Load Balancing (global)
+      file: gcp/networking/cloud-load-balancing.md
+      tier: 1
+
+- concept: "Regional / Internal Load Balancer"
+  category: networking
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Elastic Load Balancing (ELB)
+      file: aws/networking/elb.md
+      tier: 1
+    - provider: Azure
+      service: Load Balancer
+      file: azure/networking/load-balancer.md
+      tier: 1
+    - provider: GCP
+      service: Cloud Load Balancing
+      file: gcp/networking/cloud-load-balancing.md
+      tier: 1
+
+- concept: "API Gateway / API Management"
+  category: networking
+  equivalence: medium
+  note: "API Gateway is a developer-focused managed gateway. Azure API Management adds a full API lifecycle portal. Apigee is an enterprise-grade full-lifecycle API platform. Different scale and feature surface."
+  members:
+    - provider: AWS
+      service: API Gateway
+      file: aws/networking/api-gateway.md
+      tier: 1
+    - provider: Azure
+      service: API Management
+      file: azure/integration_messaging/api-management.md
+      tier: 1
+    - provider: GCP
+      service: Apigee
+      file: gcp/integration_messaging/apigee.md
+      tier: 1
+
+- concept: "Dedicated Private Connectivity (on-premises)"
+  category: networking
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Direct Connect
+      file: aws/networking/direct-connect.md
+      tier: 2
+    - provider: Azure
+      service: ExpressRoute
+      file: azure/networking/expressroute.md
+      tier: 2
+    - provider: GCP
+      service: Cloud Interconnect
+      file: gcp/networking/cloud-interconnect.md
+      tier: 2
+
+- concept: "Site-to-Site VPN"
+  category: networking
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Site-to-Site VPN
+      file: aws/networking/vpn.md
+      tier: 2
+    - provider: Azure
+      service: VPN Gateway
+      file: azure/networking/vpn-gateway.md
+      tier: 2
+    - provider: GCP
+      service: Cloud VPN
+      file: gcp/networking/cloud-vpn.md
+      tier: 2
+
+- concept: "Private Endpoint / Service Endpoint"
+  category: networking
+  equivalence: high
+  members:
+    - provider: AWS
+      service: PrivateLink
+      file: aws/networking/privatelink.md
+      tier: 2
+    - provider: Azure
+      service: Private Link
+      file: azure/networking/private-link.md
+      tier: 2
+    - provider: GCP
+      service: Private Service Connect
+      file: gcp/networking/vpc.md
+      tier: 1
+
+- concept: "Hub-and-Spoke Network Transit"
+  category: networking
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Transit Gateway
+      file: aws/networking/transit-gateway.md
+      tier: 2
+    - provider: Azure
+      service: Virtual Network Manager
+      file: azure/networking/virtual-network-manager.md
+      tier: 3
+    - provider: GCP
+      service: Network Connectivity Center
+      file: gcp/networking/network-connectivity-center.md
+      tier: 2
+
+# ─── security_identity ───────────────────────────────────────────────────────
+
+- concept: "Identity and Access Management (IAM)"
+  category: security_identity
+  equivalence: medium
+  note: "AWS IAM and GCP IAM are resource-centric RBAC/ABAC systems tightly integrated with their respective resource APIs. Azure Entra ID is a full identity provider (IdP) combining directory services, SSO, and conditional access — it serves a broader purpose than IAM alone."
+  members:
+    - provider: AWS
+      service: IAM
+      file: aws/security_identity/iam.md
+      tier: 1
+    - provider: Azure
+      service: Microsoft Entra ID
+      file: azure/security_identity/entra-id.md
+      tier: 1
+    - provider: GCP
+      service: IAM
+      file: gcp/security_identity/iam.md
+      tier: 1
+
+- concept: "Secrets Management"
+  category: security_identity
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Secrets Manager
+      file: aws/security_identity/secrets-manager.md
+      tier: 1
+    - provider: Azure
+      service: Key Vault (Secrets)
+      file: azure/security_identity/key-vault.md
+      tier: 1
+    - provider: GCP
+      service: Secret Manager
+      file: gcp/security_identity/secret-manager.md
+      tier: 1
+
+- concept: "Key Management Service (KMS)"
+  category: security_identity
+  equivalence: high
+  members:
+    - provider: AWS
+      service: KMS
+      file: aws/security_identity/kms.md
+      tier: 1
+    - provider: Azure
+      service: Key Vault (Keys)
+      file: azure/security_identity/key-vault.md
+      tier: 1
+    - provider: GCP
+      service: Cloud KMS
+      file: gcp/security_identity/cloud-kms.md
+      tier: 1
+
+- concept: "Web Application Firewall (WAF)"
+  category: security_identity
+  equivalence: high
+  members:
+    - provider: AWS
+      service: WAF
+      file: aws/security_identity/waf.md
+      tier: 1
+    - provider: Azure
+      service: WAF
+      file: azure/security_identity/waf.md
+      tier: 1
+    - provider: GCP
+      service: Cloud Armor
+      file: gcp/security_identity/cloud-armor.md
+      tier: 1
+
+- concept: "DDoS Protection"
+  category: security_identity
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Shield
+      file: aws/security_identity/shield.md
+      tier: 2
+    - provider: Azure
+      service: DDoS Protection
+      file: azure/security_identity/ddos-protection.md
+      tier: 2
+    - provider: GCP
+      service: Cloud Armor (DDoS built-in)
+      file: gcp/security_identity/cloud-armor.md
+      tier: 1
+
+- concept: "Threat Detection / Cloud Security Posture (CSPM)"
+  category: security_identity
+  equivalence: medium
+  note: "GuardDuty focuses on threat detection via log analysis (VPC Flow Logs, CloudTrail, DNS). Defender for Cloud combines CSPM and workload protection across multi-cloud. Security Command Center is a CSPM + threat detection platform. All differ in scope and integration depth."
+  members:
+    - provider: AWS
+      service: GuardDuty
+      file: aws/security_identity/guardduty.md
+      tier: 1
+    - provider: Azure
+      service: Defender for Cloud
+      file: azure/security_identity/defender-for-cloud.md
+      tier: 1
+    - provider: GCP
+      service: Security Command Center
+      file: gcp/security_identity/security-command-center.md
+      tier: 2
+
+- concept: "SIEM / Security Operations"
+  category: security_identity
+  equivalence: medium
+  note: "Security Hub aggregates findings from AWS services. Microsoft Sentinel is a full cloud-native SIEM with SOAR capabilities. Google Security Operations (Chronicle) is a high-scale security analytics platform. Meaningfully different scope and capability."
+  members:
+    - provider: AWS
+      service: Security Hub
+      file: aws/security_identity/security-hub.md
+      tier: 2
+    - provider: Azure
+      service: Microsoft Sentinel
+      file: azure/security_identity/microsoft-sentinel.md
+      tier: 2
+    - provider: GCP
+      service: Google Security Operations (Chronicle)
+      file: gcp/security_identity/chronicle.md
+      tier: 2
+
+- concept: "Identity for End-Users / Customer Identity (CIAM)"
+  category: security_identity
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Cognito
+      file: aws/security_identity/cognito.md
+      tier: 2
+    - provider: Azure
+      service: Entra External ID
+      file: azure/security_identity/entra-external-id.md
+      tier: 2
+    - provider: GCP
+      service: Identity Platform (Firebase Auth)
+      file: gcp/security_identity/cloud-identity.md
+      tier: 2
+
+- concept: "Directory Services (Active Directory)"
+  category: security_identity
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Directory Service
+      file: aws/security_identity/directory-service.md
+      tier: 2
+    - provider: Azure
+      service: Entra Domain Services
+      file: azure/security_identity/entra-domain-services.md
+      tier: 2
+    - provider: GCP
+      service: Managed Microsoft AD
+      file: gcp/security_identity/cloud-identity.md
+      tier: 2
+
+- concept: "Hardware Security Module (HSM)"
+  category: security_identity
+  equivalence: high
+  members:
+    - provider: AWS
+      service: CloudHSM
+      file: aws/security_identity/cloudhsm.md
+      tier: 3
+    - provider: Azure
+      service: Dedicated HSM
+      file: azure/security_identity/dedicated-hsm.md
+      tier: 3
+
+- concept: "Data Loss Prevention / Sensitive Data Classification"
+  category: security_identity
+  equivalence: medium
+  note: "Macie is focused on S3 data classification. Microsoft Information Protection is a broad data governance and labelling framework. Sensitive Data Protection is a DLP API for scanning and de-identifying data. Different scope and integration models."
+  members:
+    - provider: AWS
+      service: Macie
+      file: aws/security_identity/macie.md
+      tier: 3
+    - provider: Azure
+      service: Microsoft Information Protection
+      file: azure/security_identity/information-protection.md
+      tier: 2
+    - provider: GCP
+      service: Sensitive Data Protection
+      file: gcp/security_identity/sensitive-data-protection.md
+      tier: 2
+
+- concept: "Zero Trust / Context-Aware Access"
+  category: security_identity
+  equivalence: medium
+  note: "BeyondCorp Enterprise is a dedicated zero-trust access proxy. AWS Verified Access integrates with IAM Identity Center. Azure uses Conditional Access within Entra ID. All achieve zero-trust through different architectures."
+  members:
+    - provider: AWS
+      service: Verified Access
+      file: aws/networking/verified-access.md
+      tier: 3
+    - provider: Azure
+      service: Entra ID (Conditional Access)
+      file: azure/security_identity/entra-id.md
+      tier: 1
+    - provider: GCP
+      service: BeyondCorp Enterprise
+      file: gcp/security_identity/beyondcorp.md
+      tier: 2
+
+# ─── ai_ml ───────────────────────────────────────────────────────────────────
+
+- concept: "ML Platform (end-to-end)"
+  category: ai_ml
+  equivalence: high
+  members:
+    - provider: AWS
+      service: SageMaker AI
+      file: aws/ai_ml/sagemaker.md
+      tier: 1
+    - provider: Azure
+      service: Azure Machine Learning
+      file: azure/ai_ml/azure-machine-learning.md
+      tier: 1
+    - provider: GCP
+      service: Vertex AI
+      file: gcp/ai_ml/vertex-ai.md
+      tier: 1
+
+- concept: "Generative AI / Foundation Model API"
+  category: ai_ml
+  equivalence: medium
+  note: "Bedrock is a multi-model API aggregator (Anthropic, Meta, Mistral, Amazon Titan, etc.). Azure OpenAI Service is an exclusive deployment of OpenAI models within Azure infrastructure. Vertex AI provides access to Google's Gemini models plus third-party models via Model Garden. Different model catalogues and access models."
+  members:
+    - provider: AWS
+      service: Bedrock
+      file: aws/ai_ml/bedrock.md
+      tier: 1
+    - provider: Azure
+      service: Azure OpenAI Service
+      file: azure/ai_ml/azure-openai.md
+      tier: 1
+    - provider: GCP
+      service: Vertex AI (Gemini / Model Garden)
+      file: gcp/ai_ml/vertex-ai.md
+      tier: 1
+
+- concept: "AI Agent Builder / Orchestration"
+  category: ai_ml
+  equivalence: medium
+  note: "Managed orchestration platforms for building AI agents and RAG pipelines. Differ significantly in abstraction level, supported models, and integration surface."
+  members:
+    - provider: AWS
+      service: Amazon Q Business
+      file: aws/ai_ml/q-business.md
+      tier: 2
+    - provider: Azure
+      service: Foundry Agent Service
+      file: azure/ai_ml/foundry-agent-service.md
+      tier: 2
+    - provider: GCP
+      service: Vertex AI Agent Builder
+      file: gcp/ai_ml/vertex-ai-agent-builder.md
+      tier: 1
+
+- concept: "Vision AI (image classification / object detection)"
+  category: ai_ml
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Rekognition
+      file: aws/ai_ml/rekognition.md
+      tier: 2
+    - provider: Azure
+      service: Computer Vision
+      file: azure/ai_ml/computer-vision.md
+      tier: 2
+    - provider: GCP
+      service: Vision AI
+      file: gcp/ai_ml/vision-ai.md
+      tier: 2
+
+- concept: "Natural Language Processing (NLP)"
+  category: ai_ml
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Comprehend
+      file: aws/ai_ml/comprehend.md
+      tier: 2
+    - provider: Azure
+      service: Language Service
+      file: azure/ai_ml/language-service.md
+      tier: 2
+    - provider: GCP
+      service: Natural Language AI
+      file: gcp/ai_ml/natural-language-ai.md
+      tier: 2
+
+- concept: "Speech-to-Text"
+  category: ai_ml
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Transcribe
+      file: aws/ai_ml/transcribe.md
+      tier: 2
+    - provider: Azure
+      service: Speech Service (STT)
+      file: azure/ai_ml/speech-service.md
+      tier: 2
+    - provider: GCP
+      service: Speech-to-Text
+      file: gcp/ai_ml/speech-to-text.md
+      tier: 2
+
+- concept: "Text-to-Speech"
+  category: ai_ml
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Polly
+      file: aws/ai_ml/polly.md
+      tier: 2
+    - provider: Azure
+      service: Speech Service (TTS)
+      file: azure/ai_ml/speech-service.md
+      tier: 2
+    - provider: GCP
+      service: Text-to-Speech
+      file: gcp/ai_ml/text-to-speech.md
+      tier: 2
+
+- concept: "Machine Translation"
+  category: ai_ml
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Translate
+      file: aws/ai_ml/translate.md
+      tier: 2
+    - provider: Azure
+      service: Translator
+      file: azure/ai_ml/translator.md
+      tier: 2
+    - provider: GCP
+      service: Translation AI
+      file: gcp/ai_ml/translation-ai.md
+      tier: 2
+
+- concept: "Conversational AI / Chatbot Builder"
+  category: ai_ml
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Lex
+      file: aws/ai_ml/lex.md
+      tier: 2
+    - provider: Azure
+      service: Bot Service
+      file: azure/ai_ml/bot-service.md
+      tier: 2
+    - provider: GCP
+      service: Conversational Agents (Dialogflow CX)
+      file: gcp/ai_ml/conversational-agents.md
+      tier: 2
+
+- concept: "Document / OCR Processing"
+  category: ai_ml
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Textract
+      file: aws/ai_ml/textract.md
+      tier: 2
+    - provider: Azure
+      service: Azure AI Services (Document Intelligence)
+      file: azure/ai_ml/ai-services.md
+      tier: 1
+    - provider: GCP
+      service: Document AI
+      file: gcp/ai_ml/document-ai.md
+      tier: 2
+
+- concept: "Enterprise Search / RAG Search"
+  category: ai_ml
+  equivalence: medium
+  note: "Kendra is an ML-powered enterprise search service. Azure AI Search is a vector + keyword search platform commonly used for RAG. Vertex AI Search is a managed search service backed by Google's retrieval infrastructure. All support RAG-style retrieval but with different managed-ness, indexing models, and pricing."
+  members:
+    - provider: AWS
+      service: Kendra
+      file: aws/ai_ml/kendra.md
+      tier: 2
+    - provider: Azure
+      service: Azure AI Search
+      file: azure/ai_ml/ai-search.md
+      tier: 2
+    - provider: GCP
+      service: Vertex AI Search
+      file: gcp/ai_ml/vertex-ai-search.md
+      tier: 2
+
+# ─── analytics ───────────────────────────────────────────────────────────────
+
+- concept: "Real-Time Stream Ingestion"
+  category: analytics
+  equivalence: medium
+  note: "Kinesis Data Streams is shard-based with ordered delivery. Event Hubs is partition-based and Kafka-compatible. Pub/Sub is serverless and globally replicated but lacks strict ordering by default. Different consistency, ordering, and retention models."
+  members:
+    - provider: AWS
+      service: Kinesis Data Streams
+      file: aws/analytics/kinesis-data-streams.md
+      tier: 1
+    - provider: Azure
+      service: Event Hubs
+      file: azure/integration_messaging/event-hubs.md
+      tier: 1
+    - provider: GCP
+      service: Pub/Sub
+      file: gcp/analytics/pubsub.md
+      tier: 1
+
+- concept: "Managed Stream Processing / Continuous Analytics"
+  category: analytics
+  equivalence: medium
+  note: "Managed Flink and Dataflow (Apache Beam) are full stream+batch frameworks. Stream Analytics is a simpler SQL-based streaming job service. Dataflow also handles batch, making it a unified pipeline engine."
+  members:
+    - provider: AWS
+      service: Managed Service for Apache Flink
+      file: aws/analytics/managed-flink.md
+      tier: 2
+    - provider: Azure
+      service: Stream Analytics
+      file: azure/analytics/stream-analytics.md
+      tier: 2
+    - provider: GCP
+      service: Dataflow
+      file: gcp/analytics/dataflow.md
+      tier: 1
+
+- concept: "Serverless Query Engine (ad-hoc SQL over object storage)"
+  category: analytics
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Athena
+      file: aws/analytics/athena.md
+      tier: 1
+    - provider: Azure
+      service: Synapse Analytics (Serverless SQL Pool)
+      file: azure/analytics/synapse-analytics.md
+      tier: 1
+    - provider: GCP
+      service: BigQuery
+      file: gcp/analytics/bigquery.md
+      tier: 1
+
+- concept: "ETL / Data Integration Pipeline"
+  category: analytics
+  equivalence: medium
+  note: "Glue is a serverless ETL service using PySpark/Python. Data Factory is a visual, code-optional orchestration platform. Cloud Data Fusion is a managed CDAP platform with a visual pipeline builder. Different abstraction levels and target audiences."
+  members:
+    - provider: AWS
+      service: Glue
+      file: aws/analytics/glue.md
+      tier: 1
+    - provider: Azure
+      service: Data Factory
+      file: azure/analytics/data-factory.md
+      tier: 1
+    - provider: GCP
+      service: Cloud Data Fusion
+      file: gcp/analytics/cloud-data-fusion.md
+      tier: 2
+
+- concept: "Managed Spark / Hadoop (Big Data Processing)"
+  category: analytics
+  equivalence: high
+  members:
+    - provider: AWS
+      service: EMR
+      file: aws/analytics/emr.md
+      tier: 1
+    - provider: Azure
+      service: HDInsight
+      file: azure/analytics/hdinsight.md
+      tier: 2
+    - provider: GCP
+      service: Dataproc
+      file: gcp/analytics/dataproc.md
+      tier: 2
+
+- concept: "Managed Apache Kafka"
+  category: analytics
+  equivalence: high
+  members:
+    - provider: AWS
+      service: MSK
+      file: aws/analytics/msk.md
+      tier: 2
+    - provider: Azure
+      service: Event Hubs (Kafka-compatible)
+      file: azure/integration_messaging/event-hubs.md
+      tier: 1
+    - provider: GCP
+      service: Managed Service for Apache Kafka
+      file: gcp/analytics/managed-kafka.md
+      tier: 2
+
+- concept: "Business Intelligence (BI)"
+  category: analytics
+  equivalence: high
+  members:
+    - provider: AWS
+      service: QuickSight
+      file: aws/analytics/quicksight.md
+      tier: 2
+    - provider: Azure
+      service: Power BI Embedded
+      file: azure/analytics/power-bi-embedded.md
+      tier: 2
+    - provider: GCP
+      service: Looker
+      file: gcp/analytics/looker.md
+      tier: 2
+
+- concept: "Data Catalog / Governance"
+  category: analytics
+  equivalence: medium
+  note: "Lake Formation focuses on data lake access control and cataloging within AWS. Microsoft Purview is a broad data governance platform spanning on-prem, multi-cloud, and Microsoft 365. Dataplex is a unified data management and cataloging layer across GCP. Different scope and governance models."
+  members:
+    - provider: AWS
+      service: Lake Formation
+      file: aws/analytics/lake-formation.md
+      tier: 2
+    - provider: Azure
+      service: Microsoft Purview
+      file: azure/analytics/purview.md
+      tier: 2
+    - provider: GCP
+      service: Dataplex Universal Catalog
+      file: gcp/analytics/dataplex.md
+      tier: 2
+
+# ─── integration_messaging ───────────────────────────────────────────────────
+
+- concept: "Simple Queue (point-to-point)"
+  category: integration_messaging
+  equivalence: high
+  members:
+    - provider: AWS
+      service: SQS
+      file: aws/integration_messaging/sqs.md
+      tier: 1
+    - provider: Azure
+      service: Queue Storage
+      file: azure/integration_messaging/queue-storage.md
+      tier: 2
+    - provider: GCP
+      service: Cloud Tasks
+      file: gcp/integration_messaging/cloud-tasks.md
+      tier: 2
+
+- concept: "Enterprise Message Broker (topics, sessions, ordering)"
+  category: integration_messaging
+  equivalence: medium
+  note: "Service Bus and Amazon MQ add topics, dead-lettering, sessions, and ordering — enterprise brokered messaging semantics distinct from simple queues. GCP Pub/Sub covers pub/sub fan-out but lacks brokered messaging semantics."
+  members:
+    - provider: AWS
+      service: Amazon MQ
+      file: aws/integration_messaging/mq.md
+      tier: 2
+    - provider: Azure
+      service: Service Bus
+      file: azure/integration_messaging/service-bus.md
+      tier: 1
+
+- concept: "Pub/Sub (fan-out notifications)"
+  category: integration_messaging
+  equivalence: high
+  members:
+    - provider: AWS
+      service: SNS
+      file: aws/integration_messaging/sns.md
+      tier: 1
+    - provider: Azure
+      service: Event Grid
+      file: azure/integration_messaging/event-grid.md
+      tier: 1
+    - provider: GCP
+      service: Pub/Sub
+      file: gcp/integration_messaging/pubsub.md
+      tier: 1
+
+- concept: "Event-Driven Integration / Event Bus"
+  category: integration_messaging
+  equivalence: medium
+  note: "EventBridge is a serverless event bus with schema registry and SaaS integrations. Event Grid is Azure's event routing service optimised for Azure resource events. Eventarc routes events from GCP services to Cloud Run/Workflows. Different routing models and integration ecosystems."
+  members:
+    - provider: AWS
+      service: EventBridge
+      file: aws/integration_messaging/eventbridge.md
+      tier: 1
+    - provider: Azure
+      service: Event Grid
+      file: azure/integration_messaging/event-grid.md
+      tier: 1
+    - provider: GCP
+      service: Eventarc
+      file: gcp/integration_messaging/eventarc.md
+      tier: 2
+
+- concept: "Serverless Workflow Orchestration"
+  category: integration_messaging
+  equivalence: medium
+  note: "Step Functions is a state-machine-based orchestrator with fine-grained execution control. Logic Apps is a visual low-code workflow platform targeting integration scenarios. Workflows is a lightweight YAML-based orchestrator. Different abstraction levels and target audiences."
+  members:
+    - provider: AWS
+      service: Step Functions
+      file: aws/integration_messaging/step-functions.md
+      tier: 1
+    - provider: Azure
+      service: Logic Apps
+      file: azure/integration_messaging/logic-apps.md
+      tier: 1
+    - provider: GCP
+      service: Workflows
+      file: gcp/integration_messaging/workflows.md
+      tier: 2
+
+- concept: "Managed Apache Airflow (DAG-based orchestration)"
+  category: integration_messaging
+  equivalence: high
+  members:
+    - provider: AWS
+      service: MWAA
+      file: aws/integration_messaging/mwaa.md
+      tier: 2
+    - provider: GCP
+      service: Cloud Composer
+      file: gcp/integration_messaging/cloud-composer.md
+      tier: 2
+
+- concept: "SaaS Data Integration / iPaaS"
+  category: integration_messaging
+  equivalence: medium
+  note: "All three provide managed connectors for SaaS-to-cloud data movement but with different connector catalogues and pricing models."
+  members:
+    - provider: AWS
+      service: AppFlow
+      file: aws/integration_messaging/appflow.md
+      tier: 2
+    - provider: Azure
+      service: Logic Apps (with connectors)
+      file: azure/integration_messaging/logic-apps.md
+      tier: 1
+    - provider: GCP
+      service: Application Integration
+      file: gcp/integration_messaging/application-integration.md
+      tier: 2
+
+# ─── devops ──────────────────────────────────────────────────────────────────
+
+- concept: "Cloud Monitoring / Metrics"
+  category: devops
+  equivalence: high
+  members:
+    - provider: AWS
+      service: CloudWatch
+      file: aws/devops/cloudwatch.md
+      tier: 1
+    - provider: Azure
+      service: Azure Monitor
+      file: azure/devops/azure-monitor.md
+      tier: 1
+    - provider: GCP
+      service: Cloud Monitoring
+      file: gcp/devops/cloud-monitoring.md
+      tier: 1
+
+- concept: "Cloud Logging"
+  category: devops
+  equivalence: high
+  members:
+    - provider: AWS
+      service: CloudTrail
+      file: aws/devops/cloudtrail.md
+      tier: 1
+    - provider: Azure
+      service: Azure Monitor (Log Analytics)
+      file: azure/devops/azure-monitor.md
+      tier: 1
+    - provider: GCP
+      service: Cloud Logging
+      file: gcp/devops/cloud-logging.md
+      tier: 1
+
+- concept: "Infrastructure as Code"
+  category: devops
+  equivalence: medium
+  note: "CloudFormation and ARM/Bicep are provider-native IaC tools with proprietary DSLs. GCP Infrastructure Manager is a managed Terraform service. Terraform is multi-cloud; the native tools are provider-locked. Significant for multi-cloud or standardisation requirements."
+  members:
+    - provider: AWS
+      service: CloudFormation
+      file: aws/devops/cloudformation.md
+      tier: 1
+    - provider: Azure
+      service: ARM Templates / Bicep
+      file: azure/devops/arm.md
+      tier: 1
+    - provider: GCP
+      service: Infrastructure Manager
+      file: gcp/devops/infrastructure-manager.md
+      tier: 2
+
+- concept: "CI/CD Pipeline"
+  category: devops
+  equivalence: high
+  members:
+    - provider: AWS
+      service: CodePipeline + CodeBuild
+      file: aws/devops/codepipeline.md
+      tier: 2
+    - provider: Azure
+      service: Azure Pipelines
+      file: azure/devops/azure-pipelines.md
+      tier: 2
+    - provider: GCP
+      service: Cloud Build + Cloud Deploy
+      file: gcp/devops/cloud-build.md
+      tier: 1
+
+- concept: "Distributed Tracing / APM"
+  category: devops
+  equivalence: high
+  members:
+    - provider: AWS
+      service: X-Ray
+      file: aws/devops/xray.md
+      tier: 2
+    - provider: Azure
+      service: Application Insights (Azure Monitor)
+      file: azure/devops/azure-monitor.md
+      tier: 1
+    - provider: GCP
+      service: Cloud Trace
+      file: gcp/devops/cloud-trace.md
+      tier: 2
+
+- concept: "Managed Prometheus"
+  category: devops
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Managed Service for Prometheus
+      file: aws/devops/managed-prometheus.md
+      tier: 2
+    - provider: Azure
+      service: Azure Monitor managed Prometheus
+      file: azure/devops/azure-monitor.md
+      tier: 1
+    - provider: GCP
+      service: Managed Service for Prometheus
+      file: gcp/devops/managed-prometheus.md
+      tier: 2
+
+- concept: "Artifact / Package Registry"
+  category: devops
+  equivalence: high
+  members:
+    - provider: AWS
+      service: CodeArtifact + ECR
+      file: aws/devops/codeartifact.md
+      tier: 3
+    - provider: Azure
+      service: Azure Artifacts + ACR
+      file: azure/devops/azure-artifacts.md
+      tier: 2
+    - provider: GCP
+      service: Artifact Registry
+      file: gcp/devops/artifact-registry.md
+      tier: 2
+
+- concept: "Cost Management / FinOps"
+  category: devops
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Cost Explorer
+      file: aws/devops/cost-explorer.md
+      tier: 2
+    - provider: Azure
+      service: Cost Management and Billing
+      file: azure/devops/cost-management.md
+      tier: 1
+    - provider: GCP
+      service: Cost Management
+      file: gcp/devops/cost-management.md
+      tier: 2
+
+- concept: "Cloud Config / Policy / Compliance"
+  category: devops
+  equivalence: medium
+  note: "Conceptually equivalent governance layers but integrated differently with each cloud's resource hierarchy model."
+  members:
+    - provider: AWS
+      service: Config + Organizations
+      file: aws/devops/config.md
+      tier: 2
+    - provider: Azure
+      service: Azure Policy + Management Groups
+      file: azure/devops/azure-policy.md
+      tier: 1
+    - provider: GCP
+      service: Organization Policy Service
+      file: gcp/devops/infrastructure-manager.md
+      tier: 2
+
+- concept: "Auto Scaling"
+  category: devops
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Auto Scaling
+      file: aws/devops/auto-scaling.md
+      tier: 1
+    - provider: Azure
+      service: Azure Monitor Autoscale
+      file: azure/devops/azure-monitor.md
+      tier: 1
+    - provider: GCP
+      service: Managed Instance Groups (Autoscaler)
+      file: gcp/devops/cloud-monitoring.md
+      tier: 1
+
+# ─── migration_hybrid ────────────────────────────────────────────────────────
+
+- concept: "Hybrid Cloud / Multi-Cloud Control Plane"
+  category: migration_hybrid
+  equivalence: medium
+  note: "Outposts is a physical rack delivered by AWS to run native AWS services on-premises. Azure Arc extends the Azure control plane to any infrastructure (VMs, Kubernetes, servers) without requiring hardware. Anthos runs GKE anywhere (on-prem, other clouds, edge). Fundamentally different models: hardware-based (Outposts) vs. software-based control plane extension (Arc, Anthos)."
+  members:
+    - provider: AWS
+      service: Outposts
+      file: aws/migration_hybrid/outposts.md
+      tier: 1
+    - provider: Azure
+      service: Azure Arc
+      file: azure/migration_hybrid/azure-arc.md
+      tier: 1
+    - provider: GCP
+      service: Anthos (GKE Enterprise)
+      file: gcp/migration_hybrid/anthos.md
+      tier: 1
+
+- concept: "Database Migration Service"
+  category: migration_hybrid
+  equivalence: high
+  members:
+    - provider: AWS
+      service: DMS
+      file: aws/migration_hybrid/dms.md
+      tier: 1
+    - provider: Azure
+      service: Database Migration Service
+      file: azure/migration_hybrid/database-migration-service.md
+      tier: 2
+    - provider: GCP
+      service: Database Migration Service
+      file: gcp/migration_hybrid/database-migration-service.md
+      tier: 2
+
+- concept: "Server / VM Migration"
+  category: migration_hybrid
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Application Migration Service
+      file: aws/migration_hybrid/application-migration-service.md
+      tier: 2
+    - provider: Azure
+      service: Azure Migrate
+      file: azure/migration_hybrid/azure-migrate.md
+      tier: 1
+    - provider: GCP
+      service: Migration Center
+      file: gcp/migration_hybrid/migration-center.md
+      tier: 2
+
+- concept: "Physical Data Transfer Appliance (offline)"
+  category: migration_hybrid
+  equivalence: high
+  members:
+    - provider: AWS
+      service: Snow Family
+      file: aws/migration_hybrid/snow-family.md
+      tier: 2
+    - provider: Azure
+      service: Data Box
+      file: azure/migration_hybrid/data-box.md
+      tier: 2
+    - provider: GCP
+      service: Transfer Appliance
+      file: gcp/migration_hybrid/transfer-appliance.md
+      tier: 3
+
+- concept: "Online Data Sync / Transfer"
+  category: migration_hybrid
+  equivalence: high
+  members:
+    - provider: AWS
+      service: DataSync
+      file: aws/migration_hybrid/datasync.md
+      tier: 2
+    - provider: GCP
+      service: Storage Transfer Service
+      file: gcp/migration_hybrid/storage-transfer-service.md
+      tier: 2
+
+# ─── other ───────────────────────────────────────────────────────────────────
+
+- concept: "IoT Core / Device Connectivity"
+  category: other
+  equivalence: medium
+  note: "AWS IoT Core and Azure IoT Hub are equivalent managed IoT connectivity platforms. GCP deprecated Cloud IoT Core in 2023; for IoT on GCP, Pub/Sub + custom edge is the recommended pattern."
+  members:
+    - provider: AWS
+      service: IoT Core
+      file: aws/other/iot-core.md
+      tier: 1
+    - provider: Azure
+      service: Azure IoT Hub
+      file: azure/other/iot-hub.md
+      tier: 1
+
+- concept: "IoT Edge / On-Device Runtime"
+  category: other
+  equivalence: high
+  members:
+    - provider: AWS
+      service: IoT Greengrass
+      file: aws/other/iot-greengrass.md
+      tier: 2
+    - provider: Azure
+      service: Azure IoT Edge
+      file: azure/other/iot-edge.md
+      tier: 2
+
+- concept: "Virtual Desktop Infrastructure (VDI)"
+  category: other
+  equivalence: high
+  members:
+    - provider: AWS
+      service: WorkSpaces
+      file: aws/other/workspaces.md
+      tier: 2
+    - provider: Azure
+      service: Azure Virtual Desktop
+      file: azure/other/virtual-desktop.md
+      tier: 1
+
+- concept: "Geospatial / Maps Platform"
+  category: other
+  equivalence: medium
+  note: "Google Maps Platform is the de-facto industry standard for maps and geospatial data. AWS Location Service and Azure Maps are competitive offerings with a smaller feature set and ecosystem."
+  members:
+    - provider: AWS
+      service: Location Service
+      file: aws/other/location-service.md
+      tier: 2
+    - provider: Azure
+      service: Azure Maps
+      file: azure/other/azure-maps.md
+      tier: 2
+    - provider: GCP
+      service: Google Maps Platform
+      file: gcp/other/maps-platform.md
+      tier: 2
