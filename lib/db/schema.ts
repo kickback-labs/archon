@@ -1,4 +1,12 @@
-import { pgTable, text, boolean, timestamp, integer } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  boolean,
+  timestamp,
+  uuid,
+  json,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -49,3 +57,33 @@ export const verification = pgTable("verification", {
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
+
+// ─── App tables ───────────────────────────────────────────────────────────────
+
+export const chat = pgTable("chat", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  title: text("title").notNull().default("New Chat"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  visibility: varchar("visibility", { enum: ["public", "private"] })
+    .notNull()
+    .default("private"),
+});
+
+export type Chat = typeof chat.$inferSelect;
+
+export const message = pgTable("message", {
+  id: text("id").primaryKey().notNull(),
+  chatId: uuid("chat_id")
+    .notNull()
+    .references(() => chat.id, { onDelete: "cascade" }),
+  role: varchar("role").notNull(),
+  parts: json("parts").notNull(),
+  attachments: json("attachments").notNull().default([]),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type Message = typeof message.$inferSelect;
