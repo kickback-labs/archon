@@ -45,6 +45,58 @@ function extractSpecialistJson(message: SpecialistAgentUIMessage): string {
   return lastText?.type === "text" ? lastText.text : "{}";
 }
 
+/**
+ * Run specialist promises and yield incremental WaveOutput as each one resolves.
+ * This uses a "race and remove" pattern so the UI sees each pillar appear as
+ * soon as its specialist finishes, rather than waiting for all to complete.
+ */
+async function* runSpecialistsIncrementally(
+  specialistEntries: Array<{ pillar: CategorySlug; promise: Promise<SpecialistAgentUIMessage> }>,
+): AsyncGenerator<WaveOutput> {
+  const waveOutput: WaveOutput = {};
+
+  // Wrap each promise so it carries its pillar slug and can signal completion
+  // via a shared callback. We use a queue + notify pattern.
+  const completed: Array<{ pillar: CategorySlug; msg: SpecialistAgentUIMessage }> = [];
+  let notify: (() => void) | null = null;
+  let remaining = specialistEntries.length;
+
+  const wrappedPromises = specialistEntries.map(({ pillar, promise }) =>
+    promise
+      .then((msg) => {
+        completed.push({ pillar, msg });
+        notify?.();
+      })
+      .catch(() => {
+        // Count failures so we still drain the queue
+        remaining--;
+        notify?.();
+      }),
+  );
+
+  // Drain completions as they come in
+  while (remaining > 0) {
+    // Flush any already-completed results
+    while (completed.length > 0) {
+      const result = completed.shift()!;
+      waveOutput[result.pillar] = result.msg;
+      remaining--;
+      yield { ...waveOutput };
+    }
+
+    if (remaining <= 0) break;
+
+    // Wait for the next specialist to finish
+    await new Promise<void>((resolve) => {
+      notify = resolve;
+    });
+    notify = null;
+  }
+
+  // Await all to surface any uncaught errors
+  await Promise.allSettled(wrappedPromises);
+}
+
 // ─── Wave 1 tool ─────────────────────────────────────────────────────────────
 
 const wave1InputSchema = z.object({
@@ -82,23 +134,15 @@ export const wave1SpecialistsTool = tool({
     const buildPrompt = (pillar: string) =>
       `## Requirements Schema\n${requirements_schema}\n\n## Pattern Output\n${pattern_output}\n\n## Your Pillar\nYou are the ${pillar} specialist. Analyse the above and produce your pillar recommendation.`;
 
-    // Launch all specialists in parallel
-    const specialistPromises = pillarsToRun.map((pillar) =>
-      runSpecialist(wave1Specialists[pillar], buildPrompt(pillar), abortSignal).then(
-        (msg) => ({ pillar, msg }),
-      ),
-    );
+    // Launch all specialists in parallel immediately
+    const specialistEntries = pillarsToRun.map((pillar) => ({
+      pillar: pillar as CategorySlug,
+      promise: runSpecialist(wave1Specialists[pillar], buildPrompt(pillar), abortSignal),
+    }));
 
-    // Stream combined output: yield progress updates as each specialist finishes
-    const waveOutput: WaveOutput = {};
-    const results = await Promise.allSettled(specialistPromises);
-
-    for (const result of results) {
-      if (result.status === "fulfilled") {
-        waveOutput[result.value.pillar as CategorySlug] = result.value.msg;
-      }
-      // Yield the current accumulated state so the UI sees incremental updates
-      yield { ...waveOutput };
+    // Yield incremental WaveOutput as each specialist finishes
+    for await (const snapshot of runSpecialistsIncrementally(specialistEntries)) {
+      yield snapshot;
     }
   },
   toModelOutput: ({ output }) => {
@@ -150,25 +194,16 @@ export const wave2SpecialistsTool = tool({
       `## Requirements Schema\n${requirements_schema}\n\n## Pattern Output\n${pattern_output}\n\n## Wave 1 Recommendations\n${wave1_recommendations}\n\n## Your Pillar\nYou are the ${pillar} specialist. Read the Wave 1 recommendations carefully — your decisions must be grounded in the specific services already chosen. Produce your pillar recommendation.`;
 
     // All three Wave 2 specialists always run in parallel
-    const specialistPromises = (
+    const specialistEntries = (
       Object.keys(wave2Specialists) as (keyof typeof wave2Specialists)[]
-    ).map((pillar) =>
-      runSpecialist(
-        wave2Specialists[pillar],
-        buildPrompt(pillar),
-        abortSignal,
-      ).then((msg) => ({ pillar, msg })),
-    );
+    ).map((pillar) => ({
+      pillar: pillar as CategorySlug,
+      promise: runSpecialist(wave2Specialists[pillar], buildPrompt(pillar), abortSignal),
+    }));
 
-    // Stream combined output
-    const waveOutput: WaveOutput = {};
-    const results = await Promise.allSettled(specialistPromises);
-
-    for (const result of results) {
-      if (result.status === "fulfilled") {
-        waveOutput[result.value.pillar as CategorySlug] = result.value.msg;
-      }
-      yield { ...waveOutput };
+    // Yield incremental WaveOutput as each specialist finishes
+    for await (const snapshot of runSpecialistsIncrementally(specialistEntries)) {
+      yield snapshot;
     }
   },
   toModelOutput: ({ output }) => {
