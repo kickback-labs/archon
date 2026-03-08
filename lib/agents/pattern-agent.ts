@@ -1,4 +1,10 @@
-import { gateway, InferAgentUIMessage, stepCountIs, ToolLoopAgent, wrapLanguageModel } from "ai";
+import {
+  InferAgentUIMessage,
+  stepCountIs,
+  ToolLoopAgent,
+  wrapLanguageModel,
+} from "ai";
+import { openai } from "@ai-sdk/openai";
 import { devToolsMiddleware } from "@ai-sdk/devtools";
 import { readFileTool } from "@/lib/tools/read-file-tool";
 import fs from "fs";
@@ -7,10 +13,10 @@ import path from "path";
 const patternModel =
   process.env.NODE_ENV === "development"
     ? wrapLanguageModel({
-        model: gateway("openai/gpt-4.1-nano"),
+        model: openai("gpt-5-nano"),
         middleware: devToolsMiddleware(),
       })
-    : gateway("openai/gpt-4.1-nano");
+    : openai("gpt-5-nano");
 
 const PATTERNS_CONTEXT = fs.readFileSync(
   path.join(process.cwd(), "data", "PATTERNS_CONTEXT.md"),

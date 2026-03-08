@@ -8,6 +8,13 @@
       "when": 1772902806276,
       "tag": "0000_safe_night_nurse",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772983613197,
+      "tag": "0001_fresh_karnak",
+      "breakpoints": true
     }
   ]
 }

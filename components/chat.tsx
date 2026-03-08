@@ -43,15 +43,50 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { ArchonAgentUIMessage } from "@/lib/agents/archon-agent";
 import type { PatternAgentUIMessage } from "@/lib/agents/pattern-agent";
+import type { RequirementsAgentUIMessage } from "@/lib/agents/requirements-agent";
+import type { WaveOutput } from "@/lib/agents/wave-tools";
+import type { CategorySlug } from "@/lib/tools/retrieve-tool";
 import {
   BotIcon,
+  BrainCircuitIcon,
+  CheckCircleIcon,
   CopyIcon,
+  DatabaseIcon,
   FileTextIcon,
+  GitBranchIcon,
   LayersIcon,
+  MessageSquareIcon,
+  MonitorIcon,
+  NetworkIcon,
   RefreshCcwIcon,
+  ServerIcon,
+  ShieldIcon,
+  SparklesIcon,
+  TruckIcon,
+  type LucideIcon,
 } from "lucide-react";
 import { useState, Fragment, useRef } from "react";
 import { useRouter } from "next/navigation";
+
+// ─── Pillar metadata ──────────────────────────────────────────────────────────
+
+const PILLAR_META: Record<CategorySlug, { label: string; icon: LucideIcon }> =
+  {
+    compute: { label: "Compute", icon: ServerIcon },
+    storage: { label: "Storage", icon: MonitorIcon },
+    database: { label: "Database", icon: DatabaseIcon },
+    analytics: { label: "Analytics", icon: BrainCircuitIcon },
+    ai_ml: { label: "AI / ML", icon: SparklesIcon },
+    integration_messaging: {
+      label: "Integration & Messaging",
+      icon: MessageSquareIcon,
+    },
+    migration_hybrid: { label: "Migration & Hybrid", icon: TruckIcon },
+    other: { label: "Other Services", icon: LayersIcon },
+    networking: { label: "Networking", icon: NetworkIcon },
+    devops: { label: "DevOps", icon: GitBranchIcon },
+    security_identity: { label: "Security & Identity", icon: ShieldIcon },
+  };
 
 // ─── Attachment display ───────────────────────────────────────────────────────
 
@@ -75,12 +110,62 @@ const AttachmentsDisplay = () => {
   );
 };
 
+// ─── Requirements Agent tool part renderer ───────────────────────────────────
+
+function RequirementsAgentToolPart({
+  part,
+}: {
+  part: Extract<
+    ArchonAgentUIMessage["parts"][number],
+    { type: "tool-run_requirements_agent" }
+  >;
+}) {
+  const isStreaming =
+    part.state === "input-streaming" ||
+    part.state === "input-available" ||
+    (part.state === "output-available" && part.preliminary === true);
+
+  const isComplete = part.state === "output-available" && !part.preliminary;
+
+  const headerLabel = isComplete
+    ? "Requirements extracted"
+    : "Extracting requirements…";
+
+  const nestedMessage =
+    part.state === "output-available"
+      ? (part.output as RequirementsAgentUIMessage | undefined)
+      : undefined;
+
+  const hasSchema =
+    nestedMessage?.parts.some((p) => p.type === "text") ?? false;
+
+  return (
+    <ChainOfThought
+      defaultOpen={isStreaming}
+      open={isStreaming ? true : undefined}
+    >
+      <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
+      <ChainOfThoughtContent>
+        {isComplete && hasSchema ? (
+          <ChainOfThoughtStep
+            icon={CheckCircleIcon}
+            label="Requirements schema ready"
+            status="complete"
+          />
+        ) : (
+          <ChainOfThoughtStep
+            icon={FileTextIcon}
+            label="Analysing system description…"
+            status={isStreaming ? "active" : "pending"}
+          />
+        )}
+      </ChainOfThoughtContent>
+    </ChainOfThought>
+  );
+}
+
 // ─── Pattern Agent progress renderer ─────────────────────────────────────────
 
-/**
- * Renders the nested PatternAgentUIMessage inside the run_pattern_agent tool part.
- * Shows read_file tool calls as steps and the final text (JSON result) collapsed.
- */
 function PatternAgentProgress({
   nestedMessage,
   isStreaming,
@@ -90,7 +175,6 @@ function PatternAgentProgress({
 }) {
   const parts = nestedMessage.parts ?? [];
 
-  // Collect read_file calls and the final text part
   const readFileParts = parts.filter(
     (p) => p.type === "tool-read_file",
   ) as Extract<
@@ -105,14 +189,12 @@ function PatternAgentProgress({
 
   return (
     <ChainOfThoughtContent>
-      {/* Each read_file call becomes a step */}
       {readFileParts.map((part, i) => {
         const rawPath =
           part.state === "input-streaming"
             ? null
             : ((part.input as { path?: string })?.path ?? null);
 
-        // Convert "data/patterns/container-microservices.md" → "Container Microservices"
         const patternName = rawPath
           ? rawPath
               .replace("data/patterns/", "")
@@ -140,7 +222,6 @@ function PatternAgentProgress({
         );
       })}
 
-      {/* Show the final JSON output as a step once the pattern agent is done */}
       {!isStreaming && textParts.length > 0 && (
         <ChainOfThoughtStep
           icon={LayersIcon}
@@ -152,7 +233,7 @@ function PatternAgentProgress({
   );
 }
 
-// ─── run_pattern_agent tool part renderer ────────────────────────────────────
+// ─── Pattern Agent tool part renderer ────────────────────────────────────────
 
 function PatternAgentToolPart({
   part,
@@ -173,7 +254,6 @@ function PatternAgentToolPart({
     ? "Architectural patterns selected"
     : "Selecting architectural patterns…";
 
-  // The output is a nested PatternAgentUIMessage
   const nestedMessage =
     part.state === "output-available"
       ? (part.output as PatternAgentUIMessage | undefined)
@@ -191,10 +271,168 @@ function PatternAgentToolPart({
           isStreaming={isStreaming}
         />
       ) : (
-        // While input is still being generated, show a minimal placeholder
         <ChainOfThoughtContent>
           <ChainOfThoughtStep label="Analysing requirements…" status="active" />
         </ChainOfThoughtContent>
+      )}
+    </ChainOfThought>
+  );
+}
+
+// ─── Wave progress renderer ───────────────────────────────────────────────────
+
+/**
+ * Renders one ChainOfThoughtStep per pillar.
+ * A pillar is "complete" once it appears in waveOutput.
+ * The first incomplete pillar is "active" while streaming.
+ */
+function WaveProgress({
+  pillars,
+  waveOutput,
+  isStreaming,
+}: {
+  pillars: CategorySlug[];
+  waveOutput: WaveOutput;
+  isStreaming: boolean;
+}) {
+  const firstPendingIndex = pillars.findIndex((p) => !(p in waveOutput));
+
+  return (
+    <ChainOfThoughtContent>
+      {pillars.map((pillar, i) => {
+        const meta = PILLAR_META[pillar];
+        const isDone = pillar in waveOutput;
+        const isActive = isStreaming && !isDone && i === firstPendingIndex;
+
+        return (
+          <ChainOfThoughtStep
+            key={pillar}
+            icon={meta.icon}
+            label={meta.label}
+            status={isDone ? "complete" : isActive ? "active" : "pending"}
+          />
+        );
+      })}
+    </ChainOfThoughtContent>
+  );
+}
+
+// ─── Wave 1 tool part renderer ────────────────────────────────────────────────
+
+const WAVE1_PILLARS: CategorySlug[] = [
+  "compute",
+  "storage",
+  "database",
+  "analytics",
+  "ai_ml",
+  "integration_messaging",
+  "migration_hybrid",
+  "other",
+];
+
+function Wave1ToolPart({
+  part,
+}: {
+  part: Extract<
+    ArchonAgentUIMessage["parts"][number],
+    { type: "tool-run_wave1_specialists" }
+  >;
+}) {
+  const isStreaming =
+    part.state === "input-streaming" ||
+    part.state === "input-available" ||
+    (part.state === "output-available" && part.preliminary === true);
+
+  const isComplete = part.state === "output-available" && !part.preliminary;
+
+  const waveOutput: WaveOutput =
+    part.state === "output-available" ? (part.output as WaveOutput) ?? {} : {};
+
+  // When complete, only show the pillars that actually ran
+  const pillarsToShow: CategorySlug[] =
+    isComplete && Object.keys(waveOutput).length > 0
+      ? (Object.keys(waveOutput) as CategorySlug[])
+      : WAVE1_PILLARS;
+
+  const headerLabel = isComplete
+    ? "Wave 1 specialists complete"
+    : "Running Wave 1 specialists…";
+
+  return (
+    <ChainOfThought
+      defaultOpen={isStreaming}
+      open={isStreaming ? true : undefined}
+    >
+      <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
+      {part.state === "input-streaming" || part.state === "input-available" ? (
+        <ChainOfThoughtContent>
+          <ChainOfThoughtStep
+            icon={ServerIcon}
+            label="Preparing specialists…"
+            status="active"
+          />
+        </ChainOfThoughtContent>
+      ) : (
+        <WaveProgress
+          pillars={pillarsToShow}
+          waveOutput={waveOutput}
+          isStreaming={isStreaming}
+        />
+      )}
+    </ChainOfThought>
+  );
+}
+
+// ─── Wave 2 tool part renderer ────────────────────────────────────────────────
+
+const WAVE2_PILLARS: CategorySlug[] = [
+  "networking",
+  "devops",
+  "security_identity",
+];
+
+function Wave2ToolPart({
+  part,
+}: {
+  part: Extract<
+    ArchonAgentUIMessage["parts"][number],
+    { type: "tool-run_wave2_specialists" }
+  >;
+}) {
+  const isStreaming =
+    part.state === "input-streaming" ||
+    part.state === "input-available" ||
+    (part.state === "output-available" && part.preliminary === true);
+
+  const isComplete = part.state === "output-available" && !part.preliminary;
+
+  const waveOutput: WaveOutput =
+    part.state === "output-available" ? (part.output as WaveOutput) ?? {} : {};
+
+  const headerLabel = isComplete
+    ? "Wave 2 specialists complete"
+    : "Running Wave 2 specialists…";
+
+  return (
+    <ChainOfThought
+      defaultOpen={isStreaming}
+      open={isStreaming ? true : undefined}
+    >
+      <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
+      {part.state === "input-streaming" || part.state === "input-available" ? (
+        <ChainOfThoughtContent>
+          <ChainOfThoughtStep
+            icon={NetworkIcon}
+            label="Preparing specialists…"
+            status="active"
+          />
+        </ChainOfThoughtContent>
+      ) : (
+        <WaveProgress
+          pillars={WAVE2_PILLARS}
+          waveOutput={waveOutput}
+          isStreaming={isStreaming}
+        />
       )}
     </ChainOfThought>
   );
@@ -261,6 +499,21 @@ export function Chat({ id, initialMessages }: ChatProps) {
                 {message.parts.map((part, i) => {
                   const key = `${message.id}-${i}`;
 
+                  // ── Requirements Agent tool part ─────────────────────────
+                  if (part.type === "tool-run_requirements_agent") {
+                    return (
+                      <RequirementsAgentToolPart
+                        key={key}
+                        part={
+                          part as Extract<
+                            ArchonAgentUIMessage["parts"][number],
+                            { type: "tool-run_requirements_agent" }
+                          >
+                        }
+                      />
+                    );
+                  }
+
                   // ── Pattern Agent tool part ──────────────────────────────
                   if (part.type === "tool-run_pattern_agent") {
                     return (
@@ -270,6 +523,36 @@ export function Chat({ id, initialMessages }: ChatProps) {
                           part as Extract<
                             ArchonAgentUIMessage["parts"][number],
                             { type: "tool-run_pattern_agent" }
+                          >
+                        }
+                      />
+                    );
+                  }
+
+                  // ── Wave 1 tool part ─────────────────────────────────────
+                  if (part.type === "tool-run_wave1_specialists") {
+                    return (
+                      <Wave1ToolPart
+                        key={key}
+                        part={
+                          part as Extract<
+                            ArchonAgentUIMessage["parts"][number],
+                            { type: "tool-run_wave1_specialists" }
+                          >
+                        }
+                      />
+                    );
+                  }
+
+                  // ── Wave 2 tool part ─────────────────────────────────────
+                  if (part.type === "tool-run_wave2_specialists") {
+                    return (
+                      <Wave2ToolPart
+                        key={key}
+                        part={
+                          part as Extract<
+                            ArchonAgentUIMessage["parts"][number],
+                            { type: "tool-run_wave2_specialists" }
                           >
                         }
                       />
@@ -311,7 +594,7 @@ export function Chat({ id, initialMessages }: ChatProps) {
                     );
                   }
 
-                  // Skip all other part types for now
+                  // Skip all other part types
                   return null;
                 })}
               </Fragment>
