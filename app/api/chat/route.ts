@@ -1,14 +1,18 @@
 import { auth } from "@/lib/auth";
 import {
+  archonAgent,
+  type ArchonAgentUIMessage,
+} from "@/lib/agents/archon-agent";
+import {
   getChatById,
   getMessagesByChatId,
   updateChatTitle,
   upsertMessages,
 } from "@/lib/db/queries";
-import { convertToModelMessages, generateId, streamText, type UIMessage } from "ai";
+import { createAgentUIStreamResponse, generateId, type UIMessage } from "ai";
 import { headers } from "next/headers";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   // Auth check
@@ -25,29 +29,27 @@ export async function POST(req: Request) {
     return new Response("Chat not found", { status: 404 });
   }
 
-  // Load previous messages from DB, then append the new user message
+  // Load previous messages from DB, then append the new user message.
+  // Cast to ArchonAgentUIMessage[] — messages stored in DB are structurally
+  // compatible; the narrow tool types are only needed by TypeScript's inference.
   const previousMessages = await getMessagesByChatId(id);
-  const messages = [...previousMessages, message];
+  const uiMessages = [...previousMessages, message] as ArchonAgentUIMessage[];
 
-  const result = streamText({
-    model: "openai/gpt-4.1-mini",
-    system:
-      "You are Archon, an expert cloud architect AI assistant. You help users design, plan, and optimize cloud infrastructure and architecture. You provide clear, practical guidance on cloud platforms (AWS, GCP, Azure), infrastructure patterns, cost optimization, security, and best practices.",
-    messages: await convertToModelMessages(messages),
-  });
-
-  // Consume the stream so it runs to completion even if the client disconnects
-  result.consumeStream();
-
-  return result.toUIMessageStreamResponse({
+  return createAgentUIStreamResponse({
+    agent: archonAgent,
+    uiMessages,
     generateMessageId: generateId,
-    originalMessages: messages,
+    originalMessages: uiMessages,
     onFinish: async ({ messages: finishedMessages }) => {
       // Auto-title the chat from the first user message
       if (existingChat.title === "New Chat" && finishedMessages.length >= 2) {
-        const firstUserMessage = finishedMessages.find((m) => m.role === "user");
+        const firstUserMessage = finishedMessages.find(
+          (m) => m.role === "user"
+        );
         if (firstUserMessage) {
-          const textPart = firstUserMessage.parts.find((p) => p.type === "text");
+          const textPart = firstUserMessage.parts.find(
+            (p) => p.type === "text"
+          );
           if (textPart && textPart.type === "text") {
             const title = textPart.text.slice(0, 60);
             await updateChatTitle(id, title);
@@ -55,7 +57,10 @@ export async function POST(req: Request) {
         }
       }
 
-      await upsertMessages({ chatId: id, messages: finishedMessages });
+      await upsertMessages({
+        chatId: id,
+        messages: finishedMessages,
+      });
     },
   });
 }
