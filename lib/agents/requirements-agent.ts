@@ -1,19 +1,5 @@
-import {
-  InferAgentUIMessage,
-  stepCountIs,
-  ToolLoopAgent,
-  wrapLanguageModel,
-} from "ai";
-import { openai } from "@ai-sdk/openai";
-import { devToolsMiddleware } from "@ai-sdk/devtools";
-
-const requirementsModel =
-  process.env.NODE_ENV === "development"
-    ? wrapLanguageModel({
-        model: openai("gpt-5-nano"),
-        middleware: devToolsMiddleware(),
-      })
-    : openai("gpt-5-nano");
+import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai";
+import { makeModel, agentProviderOptions } from "./model";
 
 const REQUIREMENTS_AGENT_INSTRUCTIONS = `You are the Requirements Agent for Archon, an AI cloud architect system. Your job is Phase 0 of the architectural reasoning pipeline: extract a structured Requirements Schema from the user's description BEFORE any patterns or services are considered.
 
@@ -79,7 +65,8 @@ IMPORTANT: Your final message must be ONLY the JSON object — no markdown fence
 // No tools — the requirements agent reasons from the user's message alone.
 // (ask_user tool will be added in a later phase.)
 export const requirementsAgent = new ToolLoopAgent({
-  model: requirementsModel,
+  model: makeModel(),
+  providerOptions: agentProviderOptions,
   instructions: REQUIREMENTS_AGENT_INSTRUCTIONS,
   tools: {},
   stopWhen: stepCountIs(2),

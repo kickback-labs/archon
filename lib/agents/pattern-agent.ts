@@ -1,22 +1,8 @@
-import {
-  InferAgentUIMessage,
-  stepCountIs,
-  ToolLoopAgent,
-  wrapLanguageModel,
-} from "ai";
-import { openai } from "@ai-sdk/openai";
-import { devToolsMiddleware } from "@ai-sdk/devtools";
+import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai";
+import { makeModel, agentProviderOptions } from "./model";
 import { readFileTool } from "@/lib/tools/read-file-tool";
 import fs from "fs";
 import path from "path";
-
-const patternModel =
-  process.env.NODE_ENV === "development"
-    ? wrapLanguageModel({
-        model: openai("gpt-5-nano"),
-        middleware: devToolsMiddleware(),
-      })
-    : openai("gpt-5-nano");
 
 const PATTERNS_CONTEXT = fs.readFileSync(
   path.join(process.cwd(), "data", "PATTERNS_CONTEXT.md"),
@@ -59,7 +45,8 @@ The \`implied_pillars\` list MUST be derived from the pattern detail files you r
 IMPORTANT: Your final message must be ONLY the JSON object — no markdown fences, no preamble, no explanation. Just the raw JSON.`;
 
 export const patternAgent = new ToolLoopAgent({
-  model: patternModel,
+  model: makeModel(),
+  providerOptions: agentProviderOptions,
   instructions: PATTERN_AGENT_INSTRUCTIONS,
   tools: {
     read_file: readFileTool,

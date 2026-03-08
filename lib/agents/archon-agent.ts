@@ -1,22 +1,8 @@
-import {
-  InferAgentUIMessage,
-  stepCountIs,
-  ToolLoopAgent,
-  wrapLanguageModel,
-} from "ai";
-import { openai } from "@ai-sdk/openai";
-import { devToolsMiddleware } from "@ai-sdk/devtools";
+import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai";
 import { patternAgentTool } from "./pattern-agent-tool";
 import { requirementsAgentTool } from "./requirements-agent-tool";
 import { wave1SpecialistsTool, wave2SpecialistsTool } from "./wave-tools";
-
-const archonModel =
-  process.env.NODE_ENV === "development"
-    ? wrapLanguageModel({
-        model: openai("gpt-5-nano"),
-        middleware: devToolsMiddleware(),
-      })
-    : openai("gpt-5-nano");
+import { makeModel, agentProviderOptions } from "./model";
 
 const ARCHON_INSTRUCTIONS = `You are Archon, a senior cloud architect AI. You help users design cloud infrastructure and architecture through a structured, multi-phase reasoning pipeline.
 
@@ -67,7 +53,8 @@ Write a clear, well-structured architectural response that synthesises all speci
 If the user is asking a general cloud question, following up on a previous response, or asking about costs/comparisons without describing a new system — answer directly without calling any tools.`;
 
 export const archonAgent = new ToolLoopAgent({
-  model: archonModel,
+  model: makeModel(),
+  providerOptions: agentProviderOptions,
   instructions: ARCHON_INSTRUCTIONS,
   tools: {
     run_requirements_agent: requirementsAgentTool,

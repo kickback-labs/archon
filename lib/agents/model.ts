@@ -1,0 +1,25 @@
+import {
+  openai,
+  type OpenAILanguageModelResponsesOptions,
+} from "@ai-sdk/openai";
+import { devToolsMiddleware } from "@ai-sdk/devtools";
+import { wrapLanguageModel, type LanguageModel } from "ai";
+
+export const MODEL_ID = "gpt-5-nano";
+
+export const REASONING_EFFORT: OpenAILanguageModelResponsesOptions["reasoningEffort"] =
+  "minimal";
+
+export const agentProviderOptions = {
+  openai: {
+    reasoningEffort: REASONING_EFFORT,
+  } satisfies OpenAILanguageModelResponsesOptions,
+};
+
+export function makeModel(): LanguageModel {
+  const base = openai(MODEL_ID);
+
+  return process.env.NODE_ENV === "development"
+    ? wrapLanguageModel({ model: base, middleware: devToolsMiddleware() })
+    : base;
+}

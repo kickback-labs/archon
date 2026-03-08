@@ -1,23 +1,10 @@
-import {
-  InferAgentUIMessage,
-  stepCountIs,
-  ToolLoopAgent,
-  wrapLanguageModel,
-} from "ai";
-import { openai } from "@ai-sdk/openai";
-import { devToolsMiddleware } from "@ai-sdk/devtools";
+import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai";
+import { makeModel, agentProviderOptions } from "./model";
 import { retrieveTool, type CategorySlug } from "@/lib/tools/retrieve-tool";
 
 // ─── Shared model factory ─────────────────────────────────────────────────────
-
-function makeModel() {
-  return process.env.NODE_ENV === "development"
-    ? wrapLanguageModel({
-        model: openai("gpt-5-nano"),
-        middleware: devToolsMiddleware(),
-      })
-    : openai("gpt-5-nano");
-}
+// Model configuration is centralised in ./model.ts — change it there to affect
+// all agents in the pipeline simultaneously.
 
 // ─── Pillar Recommendation output schema (for agent instructions) ─────────────
 
@@ -209,6 +196,7 @@ export type SpecialistAgentUIMessage = InferAgentUIMessage<
 export function createSpecialistAgent(pillar: CategorySlug, wave: 1 | 2) {
   return new ToolLoopAgent({
     model: makeModel(),
+    providerOptions: agentProviderOptions,
     instructions: buildSpecialistInstructions(pillar, wave),
     tools: { retrieve: retrieveTool },
     // One retrieve call + one reasoning step = 3 steps max (input → tool → output)
