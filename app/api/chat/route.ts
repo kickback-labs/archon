@@ -5,6 +5,7 @@ import {
   updateChatTitle,
   upsertMessages,
 } from "@/lib/db/queries";
+import { createMCPClient } from "@ai-sdk/mcp";
 import { convertToModelMessages, generateId, streamText, type UIMessage } from "ai";
 import { headers } from "next/headers";
 
@@ -29,11 +30,21 @@ export async function POST(req: Request) {
   const previousMessages = await getMessagesByChatId(id);
   const messages = [...previousMessages, message];
 
+  // Initialize MCP client
+  const mcpClient = await createMCPClient({
+    transport: {
+      type: "sse",
+      url: "http://localhost:8001/sse",
+    },
+  });
+
   const result = streamText({
     model: "openai/gpt-4.1-mini",
     system:
       "You are Archon, an expert cloud architect AI assistant. You help users design, plan, and optimize cloud infrastructure and architecture. You provide clear, practical guidance on cloud platforms (AWS, GCP, Azure), infrastructure patterns, cost optimization, security, and best practices.",
     messages: await convertToModelMessages(messages),
+    tools: mcpClient.tools,
+    maxSteps: 5,
   });
 
   // Consume the stream so it runs to completion even if the client disconnects
@@ -56,6 +67,9 @@ export async function POST(req: Request) {
       }
 
       await upsertMessages({ chatId: id, messages: finishedMessages });
+      
+      // Close MCP client connection
+      await mcpClient.close();
     },
   });
 }
