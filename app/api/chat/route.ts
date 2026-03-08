@@ -44,11 +44,11 @@ export async function POST(req: Request) {
       // Auto-title the chat from the first user message
       if (existingChat.title === "New Chat" && finishedMessages.length >= 2) {
         const firstUserMessage = finishedMessages.find(
-          (m) => m.role === "user"
+          (m) => m.role === "user",
         );
         if (firstUserMessage) {
           const textPart = firstUserMessage.parts.find(
-            (p) => p.type === "text"
+            (p) => p.type === "text",
           );
           if (textPart && textPart.type === "text") {
             const title = textPart.text.slice(0, 60);

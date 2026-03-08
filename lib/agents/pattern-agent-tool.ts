@@ -18,13 +18,13 @@ export const patternAgentTool = tool({
     "Run the Pattern Agent to select architectural patterns for the user's system. " +
     "This agent reads the pattern catalogue, selects matching patterns, enriches them " +
     "by reading pattern detail files, and returns a structured JSON result containing: " +
-    "selected patterns with justifications, implied architectural pillars, and open decisions.",
+    "selected patterns with justifications and implied architectural pillars.",
   inputSchema: z.object({
     system_description: z
       .string()
       .describe(
         "A concise description of the system to architect, derived from the user's message. " +
-          "Include workload type, scale hints, team context, and any constraints mentioned."
+          "Include workload type, scale hints, team context, and any constraints mentioned.",
       ),
   }),
   execute: async function* ({ system_description }, { abortSignal }) {
@@ -47,7 +47,7 @@ export const patternAgentTool = tool({
   // does NOT bloat the parent agent's context window.
   toModelOutput: ({ output: message }) => {
     const lastTextPart = (message as PatternAgentUIMessage)?.parts.findLast(
-      (p) => p.type === "text"
+      (p) => p.type === "text",
     );
     return {
       type: "text" as const,

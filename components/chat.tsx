@@ -92,7 +92,7 @@ function PatternAgentProgress({
 
   // Collect read_file calls and the final text part
   const readFileParts = parts.filter(
-    (p) => p.type === "tool-read_file"
+    (p) => p.type === "tool-read_file",
   ) as Extract<
     PatternAgentUIMessage["parts"][number],
     { type: "tool-read_file" }
@@ -107,10 +107,20 @@ function PatternAgentProgress({
     <ChainOfThoughtContent>
       {/* Each read_file call becomes a step */}
       {readFileParts.map((part, i) => {
-        const filePath =
+        const rawPath =
           part.state === "input-streaming"
-            ? "Reading pattern file…"
-            : (part.input as { path?: string })?.path ?? "Reading pattern file";
+            ? null
+            : ((part.input as { path?: string })?.path ?? null);
+
+        // Convert "data/patterns/container-microservices.md" → "Container Microservices"
+        const patternName = rawPath
+          ? rawPath
+              .replace("data/patterns/", "")
+              .replace(".md", "")
+              .split("-")
+              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+              .join(" ")
+          : null;
 
         const isActive =
           part.state === "input-available" || part.state === "input-streaming";
@@ -121,20 +131,11 @@ function PatternAgentProgress({
             key={`read-${i}`}
             icon={FileTextIcon}
             label={
-              <span className="font-mono text-xs">
-                {filePath.replace("data/patterns/", "")}
-              </span>
+              patternName
+                ? `Reading ${patternName} pattern`
+                : "Reading pattern file…"
             }
-            description={
-              isActive
-                ? "Reading…"
-                : isComplete
-                  ? "Pattern detail loaded"
-                  : undefined
-            }
-            status={
-              isActive ? "active" : isComplete ? "complete" : "pending"
-            }
+            status={isActive ? "active" : isComplete ? "complete" : "pending"}
           />
         );
       })}
@@ -179,7 +180,10 @@ function PatternAgentToolPart({
       : undefined;
 
   return (
-    <ChainOfThought defaultOpen={isStreaming} open={isStreaming ? true : undefined}>
+    <ChainOfThought
+      defaultOpen={isStreaming}
+      open={isStreaming ? true : undefined}
+    >
       <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
       {nestedMessage ? (
         <PatternAgentProgress
@@ -189,10 +193,7 @@ function PatternAgentToolPart({
       ) : (
         // While input is still being generated, show a minimal placeholder
         <ChainOfThoughtContent>
-          <ChainOfThoughtStep
-            label="Analysing requirements…"
-            status="active"
-          />
+          <ChainOfThoughtStep label="Analysing requirements…" status="active" />
         </ChainOfThoughtContent>
       )}
     </ChainOfThought>
@@ -237,7 +238,10 @@ export function Chat({ id, initialMessages }: ChatProps) {
     const hasFiles = Boolean(message.files?.length);
     if (!hasText && !hasFiles) return;
 
-    sendMessage({ text: message.text || "Sent with attachments", files: message.files });
+    sendMessage({
+      text: message.text || "Sent with attachments",
+      files: message.files,
+    });
     setText("");
   };
 

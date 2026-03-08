@@ -1,5 +1,14 @@
-import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai";
+import { gateway, InferAgentUIMessage, stepCountIs, ToolLoopAgent, wrapLanguageModel } from "ai";
+import { devToolsMiddleware } from "@ai-sdk/devtools";
 import { patternAgentTool } from "./pattern-agent-tool";
+
+const archonModel =
+  process.env.NODE_ENV === "development"
+    ? wrapLanguageModel({
+        model: gateway("openai/gpt-4.1-nano"),
+        middleware: devToolsMiddleware(),
+      })
+    : gateway("openai/gpt-4.1-nano");
 
 const ARCHON_INSTRUCTIONS = `You are Archon, a senior cloud architect AI. You help users design cloud infrastructure and architecture through a structured reasoning pipeline.
 
@@ -12,12 +21,10 @@ When a user describes a system they want to build, you MUST:
 2. **After the Pattern Agent completes**, synthesise its output into a clear, well-structured architectural response. The tool returns a JSON object with:
    - \`patterns\`: Selected architectural patterns with justifications
    - \`implied_pillars\`: Which architectural categories are in scope
-   - \`open_decisions\`: Architectural choices that will need to be made
 
 3. **Write your final response** as a helpful narrative that:
    - Explains which patterns were selected and why they fit the stated requirements
    - Lists the implied architectural pillars (the categories of cloud services needed)
-   - Highlights the key open decisions the user will need to resolve
    - Tells the user what comes next in the design process
 
 ## Tone & Style
@@ -32,7 +39,7 @@ When a user describes a system they want to build, you MUST:
 If the user is asking a general cloud question, following up on a previous response, or asking about costs/comparisons without describing a new system to build — answer directly without calling the tool.`;
 
 export const archonAgent = new ToolLoopAgent({
-  model: "openai/gpt-4.1",
+  model: archonModel,
   instructions: ARCHON_INSTRUCTIONS,
   tools: {
     run_pattern_agent: patternAgentTool,

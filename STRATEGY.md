@@ -161,10 +161,15 @@ User prompt
     ▼  Requirements Schema
 [Phase 1 — Pattern Agent]       ←→  read_file() tool  (data/patterns/*.md)
     │
-    ▼  Selected pattern(s) + implied pillars + open decisions
-[Phase 2 — Specialist Agents × N]  ←→  retrieve() tool (RAG per pillar)
+    ▼  Selected pattern(s) + implied pillars
+[Phase 2 — Wave 1 Specialist Agents × N]  ←→  retrieve() tool (RAG per pillar)
+  compute │ storage │ database │ analytics │ ai_ml │ integration_messaging │ migration_hybrid
     │
-    ▼  Per-pillar recommendations + decision log
+    ▼  Wave 1 pillar recommendations
+[Phase 2 — Wave 2 Specialist Agents × 3]  ←→  retrieve() tool (RAG per pillar)
+  networking │ devops │ security_identity (always runs)
+    │
+    ▼  Wave 2 pillar recommendations
 [Phase 3 — Critic Agent]
     │  issues found? → re-run affected specialists once with feedback
     ▼
@@ -260,12 +265,7 @@ Using the Requirements Schema and the enriched pattern detail, the agent produce
     name: string,
     justification: string       // grounded in requirements + pattern detail
   }[],
-  implied_pillars: CategorySlug[],    // derived from the pattern detail files, not from the query
-  open_decisions: {
-    decision: string,                 // e.g. "synchronous vs async API"
-    options: string[],
-    relevant_to: CategorySlug[]
-  }[]
+  implied_pillars: CategorySlug[]    // derived from the pattern detail files, not from the query
 }
 ```
 
@@ -275,32 +275,70 @@ The `implied_pillars` list is the correct moment to determine which categories m
 
 ### Phase 2 — Specialist Agents
 
-**Purpose:** For each implied pillar, a dedicated specialist agent reasons about the right service(s) for that pillar given the full context.
+**Purpose:** For each implied pillar, a dedicated specialist agent reasons about the right service(s) for that pillar given the full context. Phase 2 runs in two sequential waves. Wave 1 pillars are independent of each other and run in parallel. Wave 2 pillars are structurally dependent on Wave 1 outputs — their topology, tooling, and posture are shaped by the services already chosen — so they run after Wave 1 completes, in parallel with each other.
 
-Specialists run **in parallel** across all implied pillars.
+All specialists use the same `retrieve()` tool and produce the same output shape. The wave structure is an execution concern, not a schema concern.
 
-**Each specialist receives:**
+---
+
+#### Wave 1 — Independent Specialists
+
+**Pillars:** `compute`, `storage`, `database`, `analytics`, `ai_ml`, `integration_messaging`, `migration_hybrid`
+
+These pillars have self-contained selection decisions driven directly by the Requirements Schema and the chosen patterns. They do not depend on each other's outputs.
+
+**Each Wave 1 specialist receives:**
 - Requirements Schema
 - Selected pattern(s) and their justifications
-- Open decisions relevant to its pillar
 - Access to the `retrieve()` tool
 
-**Each specialist:**
+**Each Wave 1 specialist:**
 
 1. Formulates a precise retrieval query based on the pattern and requirements — not the raw user prompt.
 2. Calls `retrieve()` with appropriate filters (`managed`, `pricing_model`, `providers`, `tier`).
 3. Reads the returned documents (including equivalence notes).
 4. Reasons about the options relative to the requirements and pattern.
-5. Resolves any open decisions relevant to its pillar.
-6. Outputs a **pillar recommendation**.
+5. Resolves architectural decisions within its pillar scope.
+6. Flags unresolvable trade-offs (those requiring user input or preference) in `caveats[]`.
+7. Outputs a **pillar recommendation**.
 
 **Specialist system prompts are pillar-specific.** For example:
 
 - The Compute Specialist knows to reason about: VM vs container vs FaaS abstraction level, cold start implications, burst vs sustained load, operational overhead relative to team expertise, and the scaling model of the chosen pattern.
 - The Database Specialist knows to reason about: ACID requirements, consistency model, access pattern (OLTP vs OLAP vs key-value), managed vs self-managed, and data volume growth trajectory.
-- The Security & Identity Specialist always runs, even if not in `implied_pillars` — security is never optional.
 
-**Output per specialist — Pillar Recommendation:**
+---
+
+#### Wave 2 — Reactive Specialists
+
+**Pillars:** `networking`, `devops`, `security_identity`
+
+These pillars cannot be reasoned about independently. Their correct answers are structurally determined by what Wave 1 chose:
+
+- **Networking** — VPC design, load balancer type, CDN placement, DNS routing, NAT, and peering topology all follow from which compute services, database placement, and deployment pattern Wave 1 selected. A networking specialist cannot reason about ALB vs NLB without knowing whether the compute layer is container-based or serverless, or whether the deployment is single-region or multi-regional.
+- **DevOps** — CI/CD pipeline tooling, monitoring agents, logging sinks, and IaC frameworks are tightly coupled to the compute stack. The right monitoring setup for EKS (Prometheus, CloudWatch Container Insights) is different from the right setup for Lambda (CloudWatch Logs, X-Ray). DevOps tooling follows the compute choice.
+- **Security & Identity** — WAF placement depends on whether a CDN or load balancer is present. IAM role design depends on which services exist and what they access. Secrets management scope depends on the number and type of services with credentials. Security wraps the rest of the architecture; it cannot be correctly specified before the services are known. **`security_identity` always runs, even if not in `implied_pillars` — security is never optional.**
+
+**Each Wave 2 specialist receives:**
+- Requirements Schema
+- Selected pattern(s) and their justifications
+- All Wave 1 pillar recommendations (full output objects)
+- Access to the `retrieve()` tool
+
+**Each Wave 2 specialist:**
+
+1. Reads the Wave 1 pillar recommendations to understand which services have been chosen and how they connect.
+2. Formulates a retrieval query grounded in the specific Wave 1 service choices — not generic pattern keywords.
+3. Calls `retrieve()` with appropriate filters.
+4. Reads the returned documents (including equivalence notes).
+5. Reasons about the options in the context of the full Wave 1 picture.
+6. Resolves architectural decisions within its pillar scope.
+7. Flags unresolvable trade-offs in `caveats[]`.
+8. Outputs a **pillar recommendation**.
+
+---
+
+#### Output per specialist (both waves) — Pillar Recommendation
 
 ```ts
 {
@@ -329,7 +367,7 @@ The `decisions_resolved` log is persisted alongside the chat. It enables the UI 
 
 **Purpose:** Validate the full set of specialist recommendations before synthesis. A senior architect reviews a design before presenting it.
 
-**Input:** All pillar recommendations + Requirements Schema + selected patterns
+**Input:** All pillar recommendations (Wave 1 + Wave 2) + Requirements Schema + selected patterns
 
 **Checks performed:**
 
@@ -365,7 +403,7 @@ If `issues` contains any `blocking` items, the affected specialist agents are re
 **Input:**
 - Requirements Schema
 - Pattern Agent output
-- All pillar recommendations (post-critic)
+- All pillar recommendations — Wave 1 + Wave 2 (post-critic)
 - All resolved decisions
 
 **Output — four parts:**
@@ -463,8 +501,10 @@ This allows the UI to render a "Why this?" panel for any service in the output �
 
 3. **Agents do the reasoning; RAG provides the knowledge.** Retrieval is a tool that agents call with precise, context-grounded queries. It is not the control flow of the system.
 
-4. **Every recommendation is validated.** The Critic Agent catches integration gaps, constraint violations, and disproportionate complexity before the user sees anything.
+4. **Dependency order is explicit.** Wave 1 specialists (compute, storage, database, analytics, ai_ml, integration_messaging, migration_hybrid) run in parallel because their decisions are independent. Wave 2 specialists (networking, devops, security_identity) run after Wave 1 because their correct answers are structurally determined by Wave 1's choices. Execution order encodes architectural dependency.
 
-5. **Decisions are first-class outputs.** The decision log is as important as the service list. An architecture without its reasoning is not reproducible and cannot be challenged or improved.
+5. **Every recommendation is validated.** The Critic Agent catches integration gaps, constraint violations, and disproportionate complexity before the user sees anything.
 
-6. **Simplicity in retrieval, richness in reasoning.** Dense vector search with metadata filters is sufficient when queries are written by specialist agents. Retrieval complexity is traded for agent reasoning depth.
+6. **Decisions are first-class outputs.** The decision log is as important as the service list. An architecture without its reasoning is not reproducible and cannot be challenged or improved.
+
+7. **Simplicity in retrieval, richness in reasoning.** Dense vector search with metadata filters is sufficient when queries are written by specialist agents. Retrieval complexity is traded for agent reasoning depth.
