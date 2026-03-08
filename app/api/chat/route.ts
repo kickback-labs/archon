@@ -1,8 +1,5 @@
 import { auth } from "@/lib/auth";
-import {
-  archonAgent,
-  type ArchonAgentUIMessage,
-} from "@/lib/agents/archon-agent";
+import type { ArchonAgentUIMessage } from "@/lib/agents/archon-agent";
 import {
   getChatById,
   getMessagesByChatId,
@@ -12,8 +9,14 @@ import {
   type DecisionLogEntry,
 } from "@/lib/db/queries";
 import type { WaveOutput } from "@/lib/agents/wave-tools";
-import { createAgentUIStreamResponse, generateId, type UIMessage } from "ai";
+import {
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  generateId,
+  type UIMessage,
+} from "ai";
 import { headers } from "next/headers";
+import { executeArchonOrchestrator } from "@/lib/agents/archon-orchestrator";
 
 export const maxDuration = 300;
 
@@ -33,16 +36,21 @@ export async function POST(req: Request) {
   }
 
   // Load previous messages from DB, then append the new user message.
-  // Cast to ArchonAgentUIMessage[] — messages stored in DB are structurally
-  // compatible; the narrow tool types are only needed by TypeScript's inference.
   const previousMessages = await getMessagesByChatId(id);
   const uiMessages = [...previousMessages, message] as ArchonAgentUIMessage[];
 
-  return createAgentUIStreamResponse({
-    agent: archonAgent,
-    uiMessages,
-    generateMessageId: generateId,
+  // Extract the user's text from the new message
+  const userTextPart = message.parts.find((p) => p.type === "text");
+  const userMessage =
+    userTextPart?.type === "text" ? userTextPart.text : "";
+
+  const abortSignal = req.signal;
+
+  const stream = createUIMessageStream<ArchonAgentUIMessage>({
     originalMessages: uiMessages,
+    generateId,
+    execute: ({ writer }) =>
+      executeArchonOrchestrator(userMessage, writer, abortSignal),
     onFinish: async ({ messages: finishedMessages }) => {
       // Auto-title the chat from the first user message
       if (existingChat.title === "New Chat" && finishedMessages.length >= 2) {
@@ -120,4 +128,6 @@ export async function POST(req: Request) {
       ]);
     },
   });
+
+  return createUIMessageStreamResponse({ stream });
 }

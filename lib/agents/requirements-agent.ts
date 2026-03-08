@@ -1,7 +1,7 @@
 import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai";
 import { makeModel, agentProviderOptions } from "./model";
 
-const REQUIREMENTS_AGENT_INSTRUCTIONS = `You are the Requirements Agent for Archon, an AI cloud architect system. Your job is Phase 0 of the architectural reasoning pipeline: extract a structured Requirements Schema from the user's description BEFORE any patterns or services are considered.
+export const REQUIREMENTS_AGENT_INSTRUCTIONS = `You are the Requirements Agent for Archon, an AI cloud architect system. Your job is Phase 0 of the architectural reasoning pipeline: extract a structured Requirements Schema from the user's description BEFORE any patterns or services are considered.
 
 ## Your job
 
