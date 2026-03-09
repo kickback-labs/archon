@@ -5,7 +5,7 @@ import {
 import { devToolsMiddleware } from "@ai-sdk/devtools";
 import { wrapLanguageModel, type LanguageModel } from "ai";
 
-export const MODEL_ID = "gpt-5";
+export const MODEL_ID = "gpt-5-mini";
 
 export const REASONING_EFFORT: OpenAILanguageModelResponsesOptions["reasoningEffort"] =
   "minimal";

@@ -1,7 +1,9 @@
 import { auth } from "@/lib/auth";
 import {
-  archonAgent,
   type ArchonAgentUIMessage,
+  classifyIntent,
+  runArchonPipeline,
+  runFollowup,
 } from "@/lib/agents/archon-agent";
 import {
   getChatById,
@@ -9,7 +11,7 @@ import {
   updateChatTitle,
   upsertMessages,
 } from "@/lib/db/queries";
-import { createAgentUIStreamResponse, generateId, type UIMessage } from "ai";
+import { createUIMessageStreamResponse, generateId, type UIMessage } from "ai";
 import { headers } from "next/headers";
 
 export const maxDuration = 300;
@@ -30,34 +32,48 @@ export async function POST(req: Request) {
   }
 
   // Load previous messages from DB, then append the new user message.
-  // Cast to ArchonAgentUIMessage[] — messages stored in DB are structurally
-  // compatible; the narrow tool types are only needed by TypeScript's inference.
   const previousMessages = await getMessagesByChatId(id);
   const uiMessages = [...previousMessages, message] as ArchonAgentUIMessage[];
 
-  return createAgentUIStreamResponse({
-    agent: archonAgent,
-    uiMessages,
-    generateMessageId: generateId,
-    originalMessages: uiMessages,
-    onFinish: async ({ messages: finishedMessages }) => {
-      // Auto-title the chat from the first user message
-      if (existingChat.title === "New Chat" && finishedMessages.length >= 2) {
-        const firstUserMessage = finishedMessages.find(
-          (m) => m.role === "user",
-        );
-        if (firstUserMessage) {
-          const textPart = firstUserMessage.parts.find(
-            (p) => p.type === "text",
-          );
-          if (textPart && textPart.type === "text") {
-            const title = textPart.text.slice(0, 60);
-            await updateChatTitle(id, title);
-          }
+  // Extract the user's text for the router
+  const userText = message.parts
+    .filter((p) => p.type === "text")
+    .map((p) => (p.type === "text" ? p.text : ""))
+    .join("\n");
+
+  // Classify intent — single structured-output call, no tool loop
+  const intent = await classifyIntent(userText, previousMessages);
+
+  // Build the shared onFinish callback
+  const onFinish = async ({ messages: finishedMessages }: { messages: UIMessage[] }) => {
+    // Auto-title the chat from the first user message
+    if (existingChat.title === "New Chat" && finishedMessages.length >= 2) {
+      const firstUserMessage = finishedMessages.find((m) => m.role === "user");
+      if (firstUserMessage) {
+        const textPart = firstUserMessage.parts.find((p) => p.type === "text");
+        if (textPart && textPart.type === "text") {
+          const title = textPart.text.slice(0, 60);
+          await updateChatTitle(id, title);
         }
       }
+    }
+    await upsertMessages({ chatId: id, messages: finishedMessages });
+  };
 
-      await upsertMessages({ chatId: id, messages: finishedMessages });
-    },
-  });
+  const stream =
+    intent === "pipeline"
+      ? runArchonPipeline({
+          uiMessages,
+          originalMessages: uiMessages,
+          generateMessageId: generateId,
+          onFinish,
+        })
+      : runFollowup({
+          uiMessages,
+          originalMessages: uiMessages,
+          generateMessageId: generateId,
+          onFinish,
+        });
+
+  return createUIMessageStreamResponse({ stream });
 }

@@ -42,8 +42,8 @@ import {
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { ArchonAgentUIMessage } from "@/lib/agents/archon-agent";
+import type { ArchonDataTypes } from "@/lib/agents/pipeline";
 import type { PatternAgentUIMessage } from "@/lib/agents/pattern-agent";
-import type { RequirementsAgentUIMessage } from "@/lib/agents/requirements-agent";
 import type { WaveOutput } from "@/lib/agents/wave-tools";
 import type { CategorySlug } from "@/lib/tools/retrieve-tool";
 import {
@@ -87,6 +87,22 @@ const PILLAR_META: Record<CategorySlug, { label: string; icon: LucideIcon }> = {
   security_identity: { label: "Security & Identity", icon: ShieldIcon },
 };
 
+// ─── Data part type helpers ───────────────────────────────────────────────────
+
+type RequirementsData = ArchonDataTypes["archon-requirements"];
+type PatternsData = ArchonDataTypes["archon-patterns"];
+type Wave1Data = ArchonDataTypes["archon-wave1"];
+type Wave2Data = ArchonDataTypes["archon-wave2"];
+
+/** Find the last data part of a given archon type in a message's parts array. */
+function findLastDataPart<T>(
+  parts: UIMessage["parts"],
+  type: `data-archon-${string}`,
+): T | undefined {
+  const last = parts.findLast((p) => p.type === type);
+  return last && "data" in last ? (last.data as T) : undefined;
+}
+
 // ─── Attachment display ───────────────────────────────────────────────────────
 
 const AttachmentsDisplay = () => {
@@ -109,34 +125,14 @@ const AttachmentsDisplay = () => {
   );
 };
 
-// ─── Requirements Agent tool part renderer ───────────────────────────────────
+// ─── Requirements phase renderer ─────────────────────────────────────────────
 
-function RequirementsAgentToolPart({
-  part,
-}: {
-  part: Extract<
-    ArchonAgentUIMessage["parts"][number],
-    { type: "tool-run_requirements_agent" }
-  >;
-}) {
-  const isStreaming =
-    part.state === "input-streaming" ||
-    part.state === "input-available" ||
-    (part.state === "output-available" && part.preliminary === true);
-
-  const isComplete = part.state === "output-available" && !part.preliminary;
-
-  const headerLabel = isComplete
-    ? "Requirements extracted"
-    : "Extracting requirements…";
-
-  const nestedMessage =
-    part.state === "output-available"
-      ? (part.output as RequirementsAgentUIMessage | undefined)
-      : undefined;
+function RequirementsPart({ data }: { data: RequirementsData }) {
+  const isStreaming = data.state === "streaming";
+  const isComplete = data.state === "complete";
 
   const hasSchema =
-    nestedMessage?.parts.some((p) => p.type === "text") ?? false;
+    data.output?.parts.some((p) => p.type === "text") ?? false;
 
   return (
     <ChainOfThought
@@ -144,7 +140,9 @@ function RequirementsAgentToolPart({
       open={isStreaming ? true : undefined}
       isStreaming={isStreaming}
     >
-      <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
+      <ChainOfThoughtHeader>
+        {isComplete ? "Requirements extracted" : "Extracting requirements…"}
+      </ChainOfThoughtHeader>
       <ChainOfThoughtContent>
         {isComplete && hasSchema ? (
           <ChainOfThoughtStep
@@ -164,7 +162,7 @@ function RequirementsAgentToolPart({
   );
 }
 
-// ─── Pattern Agent progress renderer ─────────────────────────────────────────
+// ─── Pattern phase renderer ───────────────────────────────────────────────────
 
 function PatternAgentProgress({
   nestedMessage,
@@ -182,7 +180,6 @@ function PatternAgentProgress({
     { type: "tool-read_file" }
   >[];
 
-  // Only show pattern files that have finished reading (output-available)
   const completedReads = readFileParts.filter(
     (p) => p.state === "output-available",
   );
@@ -191,7 +188,6 @@ function PatternAgentProgress({
     <ChainOfThoughtContent>
       {completedReads.map((part, i) => {
         const rawPath = (part.input as { path?: string })?.path ?? null;
-
         const patternName = rawPath
           ? rawPath
               .replace("data/patterns/", "")
@@ -205,49 +201,31 @@ function PatternAgentProgress({
           <ChainOfThoughtStep
             key={`read-${i}`}
             icon={FileTextIcon}
-            label={patternName ? `${patternName}` : "Pattern file"}
+            label={patternName ?? "Pattern file"}
             status="complete"
           />
         );
       })}
-
-      {/* While still reading patterns, show a spinner at the bottom */}
-      {isStreaming && (
+      {isStreaming ? (
         <ChainOfThoughtStep
           icon={FileTextIcon}
           label="Reading architectural patterns…"
           status="active"
+        />
+      ) : (
+        <ChainOfThoughtStep
+          icon={CheckCircleIcon}
+          label="Patterns selected"
+          status="complete"
         />
       )}
     </ChainOfThoughtContent>
   );
 }
 
-// ─── Pattern Agent tool part renderer ────────────────────────────────────────
-
-function PatternAgentToolPart({
-  part,
-}: {
-  part: Extract<
-    ArchonAgentUIMessage["parts"][number],
-    { type: "tool-run_pattern_agent" }
-  >;
-}) {
-  const isStreaming =
-    part.state === "input-streaming" ||
-    part.state === "input-available" ||
-    (part.state === "output-available" && part.preliminary === true);
-
-  const isComplete = part.state === "output-available" && !part.preliminary;
-
-  const headerLabel = isComplete
-    ? "Architectural patterns selected"
-    : "Selecting architectural patterns…";
-
-  const nestedMessage =
-    part.state === "output-available"
-      ? (part.output as PatternAgentUIMessage | undefined)
-      : undefined;
+function PatternsPart({ data }: { data: PatternsData }) {
+  const isStreaming = data.state === "streaming";
+  const isComplete = data.state === "complete";
 
   return (
     <ChainOfThought
@@ -255,15 +233,22 @@ function PatternAgentToolPart({
       open={isStreaming ? true : undefined}
       isStreaming={isStreaming}
     >
-      <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
-      {nestedMessage ? (
+      <ChainOfThoughtHeader>
+        {isComplete
+          ? "Architectural patterns selected"
+          : "Selecting architectural patterns…"}
+      </ChainOfThoughtHeader>
+      {data.output ? (
         <PatternAgentProgress
-          nestedMessage={nestedMessage}
+          nestedMessage={data.output as PatternAgentUIMessage}
           isStreaming={isStreaming}
         />
       ) : (
         <ChainOfThoughtContent>
-          <ChainOfThoughtStep label="Analysing requirements…" status="active" />
+          <ChainOfThoughtStep
+            label="Analysing requirements…"
+            status={isStreaming ? "active" : "complete"}
+          />
         </ChainOfThoughtContent>
       )}
     </ChainOfThought>
@@ -272,11 +257,6 @@ function PatternAgentToolPart({
 
 // ─── Wave progress renderer ───────────────────────────────────────────────────
 
-/**
- * Renders only the finished pillars as completed steps, then — while still
- * streaming — a single spinner row at the bottom ("Running specialist agents…").
- * Nothing is shown for pillars that haven't finished yet.
- */
 function WaveProgress({
   pillars,
   waveOutput,
@@ -286,8 +266,6 @@ function WaveProgress({
   waveOutput: WaveOutput;
   isStreaming: boolean;
 }) {
-  // Only show pillars that have actually finished, in the order they appear in
-  // the pillars array (which matches arrival order once the wave runs).
   const donePillars = pillars.filter((p) => p in waveOutput);
 
   return (
@@ -303,8 +281,6 @@ function WaveProgress({
           />
         );
       })}
-
-      {/* While specialists are still running, show a single spinner at the bottom */}
       {isStreaming && (
         <ChainOfThoughtStep
           icon={ServerIcon}
@@ -316,7 +292,7 @@ function WaveProgress({
   );
 }
 
-// ─── Wave 1 tool part renderer ────────────────────────────────────────────────
+// ─── Wave 1 renderer ──────────────────────────────────────────────────────────
 
 const WAVE1_PILLARS: CategorySlug[] = [
   "compute",
@@ -329,27 +305,15 @@ const WAVE1_PILLARS: CategorySlug[] = [
   "other",
 ];
 
-function Wave1ToolPart({
-  part,
-}: {
-  part: Extract<
-    ArchonAgentUIMessage["parts"][number],
-    { type: "tool-run_wave1_specialists" }
-  >;
-}) {
-  const isStreaming =
-    part.state === "input-streaming" ||
-    part.state === "input-available" ||
-    (part.state === "output-available" && part.preliminary === true);
+function Wave1Part({ data }: { data: Wave1Data }) {
+  const isComplete = data.complete === true;
+  const isStreaming = !isComplete;
 
-  const isComplete = part.state === "output-available" && !part.preliminary;
+  // Extract just the WaveOutput keys (exclude the `complete` flag)
+  const waveOutput: WaveOutput = Object.fromEntries(
+    Object.entries(data).filter(([k]) => k !== "complete"),
+  ) as WaveOutput;
 
-  const waveOutput: WaveOutput =
-    part.state === "output-available"
-      ? ((part.output as WaveOutput) ?? {})
-      : {};
-
-  // When complete, only show the pillars that actually ran
   const pillarsToShow: CategorySlug[] =
     isComplete && Object.keys(waveOutput).length > 0
       ? (Object.keys(waveOutput) as CategorySlug[])
@@ -360,7 +324,7 @@ function Wave1ToolPart({
 
   const headerLabel = isComplete
     ? `Wave 1 specialists complete (${totalCount}/${totalCount})`
-    : isStreaming && doneCount > 0
+    : doneCount > 0
       ? `Running Wave 1 specialists… (${doneCount}/${totalCount})`
       : "Running Wave 1 specialists…";
 
@@ -371,7 +335,7 @@ function Wave1ToolPart({
       isStreaming={isStreaming}
     >
       <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
-      {part.state === "input-streaming" || part.state === "input-available" ? (
+      {doneCount === 0 && isStreaming ? (
         <ChainOfThoughtContent>
           <ChainOfThoughtStep
             icon={ServerIcon}
@@ -390,7 +354,7 @@ function Wave1ToolPart({
   );
 }
 
-// ─── Wave 2 tool part renderer ────────────────────────────────────────────────
+// ─── Wave 2 renderer ──────────────────────────────────────────────────────────
 
 const WAVE2_PILLARS: CategorySlug[] = [
   "networking",
@@ -398,32 +362,20 @@ const WAVE2_PILLARS: CategorySlug[] = [
   "security_identity",
 ];
 
-function Wave2ToolPart({
-  part,
-}: {
-  part: Extract<
-    ArchonAgentUIMessage["parts"][number],
-    { type: "tool-run_wave2_specialists" }
-  >;
-}) {
-  const isStreaming =
-    part.state === "input-streaming" ||
-    part.state === "input-available" ||
-    (part.state === "output-available" && part.preliminary === true);
+function Wave2Part({ data }: { data: Wave2Data }) {
+  const isComplete = data.complete === true;
+  const isStreaming = !isComplete;
 
-  const isComplete = part.state === "output-available" && !part.preliminary;
-
-  const waveOutput: WaveOutput =
-    part.state === "output-available"
-      ? ((part.output as WaveOutput) ?? {})
-      : {};
+  const waveOutput: WaveOutput = Object.fromEntries(
+    Object.entries(data).filter(([k]) => k !== "complete"),
+  ) as WaveOutput;
 
   const doneCount = Object.keys(waveOutput).length;
   const totalCount = WAVE2_PILLARS.length;
 
   const headerLabel = isComplete
     ? `Wave 2 specialists complete (${totalCount}/${totalCount})`
-    : isStreaming && doneCount > 0
+    : doneCount > 0
       ? `Running Wave 2 specialists… (${doneCount}/${totalCount})`
       : "Running Wave 2 specialists…";
 
@@ -434,7 +386,7 @@ function Wave2ToolPart({
       isStreaming={isStreaming}
     >
       <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
-      {part.state === "input-streaming" || part.state === "input-available" ? (
+      {doneCount === 0 && isStreaming ? (
         <ChainOfThoughtContent>
           <ChainOfThoughtStep
             icon={NetworkIcon}
@@ -455,56 +407,48 @@ function Wave2ToolPart({
 
 // ─── Main Chat component ──────────────────────────────────────────────────────
 
-// Detects the current active phase label from the last assistant message parts
+/** Detect the current active phase label from the last assistant message parts. */
 function useCurrentPhase(messages: ArchonAgentUIMessage[]): string | null {
   return useMemo(() => {
     const last = messages.findLast((m) => m.role === "assistant");
     if (!last) return null;
 
-    const parts = last.parts as Array<{
-      type: string;
-      state?: string;
-      preliminary?: boolean;
-      output?: unknown;
-    }>;
+    const parts = last.parts;
 
-    // Scan parts from the end to find the most-recent in-progress tool
+    // Find the last data-archon-* part that indicates an active phase
     for (let i = parts.length - 1; i >= 0; i--) {
       const part = parts[i];
-      const isActive =
-        part.state === "input-streaming" ||
-        part.state === "input-available" ||
-        (part.state === "output-available" && part.preliminary === true);
+      if (!("data" in part)) continue;
 
-      if (!isActive) continue;
-
-      if (part.type === "tool-run_requirements_agent")
-        return "Extracting requirements";
-      if (part.type === "tool-run_pattern_agent")
-        return "Selecting architectural patterns";
-      if (part.type === "tool-run_wave1_specialists") {
-        const out =
-          part.state === "output-available"
-            ? ((part.output as WaveOutput) ?? {})
-            : {};
-        const done = Object.keys(out).length;
-        return done > 0
-          ? `Running Wave 1 specialists (${done} done)`
-          : "Running Wave 1 specialists";
+      if (part.type === "data-archon-requirements") {
+        const d = part.data as RequirementsData;
+        if (d.state === "streaming") return "Extracting requirements";
       }
-      if (part.type === "tool-run_wave2_specialists") {
-        const out =
-          part.state === "output-available"
-            ? ((part.output as WaveOutput) ?? {})
-            : {};
-        const done = Object.keys(out).length;
-        return done > 0
-          ? `Running Wave 2 specialists (${done} done)`
-          : "Running Wave 2 specialists";
+      if (part.type === "data-archon-patterns") {
+        const d = part.data as PatternsData;
+        if (d.state === "streaming") return "Selecting architectural patterns";
+      }
+      if (part.type === "data-archon-wave1") {
+        const d = part.data as Wave1Data;
+        if (!d.complete) {
+          const done = Object.keys(d).filter((k) => k !== "complete").length;
+          return done > 0
+            ? `Running Wave 1 specialists (${done} done)`
+            : "Running Wave 1 specialists";
+        }
+      }
+      if (part.type === "data-archon-wave2") {
+        const d = part.data as Wave2Data;
+        if (!d.complete) {
+          const done = Object.keys(d).filter((k) => k !== "complete").length;
+          return done > 0
+            ? `Running Wave 2 specialists (${done} done)`
+            : "Running Wave 2 specialists";
+        }
       }
     }
 
-    // If we have text streaming
+    // Text streaming = synthesis phase
     const lastPart = parts[parts.length - 1];
     if (lastPart?.type === "text") return "Writing architecture";
 
@@ -602,111 +546,124 @@ export function Chat({ id, initialMessages }: ChatProps) {
             />
           ) : (
             <>
-              {messages.map((message, messageIndex) => (
-                <Fragment key={message.id}>
-                  {message.parts.map((part, i) => {
-                    const key = `${message.id}-${i}`;
-
-                    // ── Requirements Agent tool part ─────────────────────────
-                    if (part.type === "tool-run_requirements_agent") {
-                      return (
-                        <RequirementsAgentToolPart
-                          key={key}
-                          part={
-                            part as Extract<
-                              ArchonAgentUIMessage["parts"][number],
-                              { type: "tool-run_requirements_agent" }
-                            >
+              {messages.map((message, messageIndex) => {
+                // For assistant messages, deduplicate data-archon-* parts:
+                // only render the *last* part of each type (which holds the
+                // latest snapshot), skipping intermediate incremental updates.
+                // We track the original index so keys stay stable across renders.
+                const lastIndexByType = new Map<string, number>();
+                if (message.role === "assistant") {
+                  message.parts.forEach((part, idx) => {
+                    if (part.type.startsWith("data-archon-")) {
+                      lastIndexByType.set(part.type, idx);
+                    }
+                  });
+                }
+                const partsToRender =
+                  message.role === "assistant"
+                    ? message.parts
+                        .map((part, idx) => ({ part, idx }))
+                        .filter(({ part, idx }) => {
+                          if (part.type.startsWith("data-archon-")) {
+                            // Only render the last occurrence of each type
+                            return lastIndexByType.get(part.type) === idx;
                           }
-                        />
-                      );
-                    }
+                          return true;
+                        })
+                    : message.parts.map((part, idx) => ({ part, idx }));
 
-                    // ── Pattern Agent tool part ──────────────────────────────
-                    if (part.type === "tool-run_pattern_agent") {
-                      return (
-                        <PatternAgentToolPart
-                          key={key}
-                          part={
-                            part as Extract<
-                              ArchonAgentUIMessage["parts"][number],
-                              { type: "tool-run_pattern_agent" }
-                            >
-                          }
-                        />
-                      );
-                    }
+                return (
+                  <Fragment key={message.id}>
+                    {partsToRender.map(({ part, idx }) => {
+                      // For data-archon-* parts we use the type string as key
+                      // (unique per message) so React updates in place instead
+                      // of remounting when the last-occurrence index shifts.
+                      // For all other parts, use the original index.
+                      const key = part.type.startsWith("data-archon-")
+                        ? `${message.id}-${part.type}`
+                        : `${message.id}-${idx}`;
 
-                    // ── Wave 1 tool part ─────────────────────────────────────
-                    if (part.type === "tool-run_wave1_specialists") {
-                      return (
-                        <Wave1ToolPart
-                          key={key}
-                          part={
-                            part as Extract<
-                              ArchonAgentUIMessage["parts"][number],
-                              { type: "tool-run_wave1_specialists" }
-                            >
-                          }
-                        />
-                      );
-                    }
+                      // ── Requirements phase ─────────────────────────────
+                      if (part.type === "data-archon-requirements") {
+                        return (
+                          <RequirementsPart
+                            key={key}
+                            data={part.data as RequirementsData}
+                          />
+                        );
+                      }
 
-                    // ── Wave 2 tool part ─────────────────────────────────────
-                    if (part.type === "tool-run_wave2_specialists") {
-                      return (
-                        <Wave2ToolPart
-                          key={key}
-                          part={
-                            part as Extract<
-                              ArchonAgentUIMessage["parts"][number],
-                              { type: "tool-run_wave2_specialists" }
-                            >
-                          }
-                        />
-                      );
-                    }
+                      // ── Pattern phase ──────────────────────────────────
+                      if (part.type === "data-archon-patterns") {
+                        return (
+                          <PatternsPart
+                            key={key}
+                            data={part.data as PatternsData}
+                          />
+                        );
+                      }
 
-                    // ── Text parts ───────────────────────────────────────────
-                    if (part.type === "text") {
-                      const isLastAssistantMessage =
-                        message.role === "assistant" &&
-                        messageIndex === messages.length - 1;
+                      // ── Wave 1 ─────────────────────────────────────────
+                      if (part.type === "data-archon-wave1") {
+                        return (
+                          <Wave1Part
+                            key={key}
+                            data={part.data as Wave1Data}
+                          />
+                        );
+                      }
 
-                      return (
-                        <Fragment key={key}>
-                          <Message from={message.role}>
-                            <MessageContent>
-                              <MessageResponse>{part.text}</MessageResponse>
-                            </MessageContent>
-                          </Message>
-                          {isLastAssistantMessage && !isStreaming && (
-                            <MessageActions>
-                              <MessageAction
-                                onClick={() => regenerate()}
-                                label="Regenerate"
-                              >
-                                <RefreshCcwIcon className="size-3" />
-                              </MessageAction>
-                              <MessageAction
-                                onClick={() =>
-                                  navigator.clipboard.writeText(part.text)
-                                }
-                                label="Copy"
-                              >
-                                <CopyIcon className="size-3" />
-                              </MessageAction>
-                            </MessageActions>
-                          )}
-                        </Fragment>
-                      );
-                    }
+                      // ── Wave 2 ─────────────────────────────────────────
+                      if (part.type === "data-archon-wave2") {
+                        return (
+                          <Wave2Part
+                            key={key}
+                            data={part.data as Wave2Data}
+                          />
+                        );
+                      }
 
-                    // Skip all other part types
-                    return null;
-                  })}
-                </Fragment>
-              ))}
+                      // ── Text parts ─────────────────────────────────────
+                      if (part.type === "text") {
+                        const isLastAssistantMessage =
+                          message.role === "assistant" &&
+                          messageIndex === messages.length - 1;
+
+                        return (
+                          <Fragment key={key}>
+                            <Message from={message.role}>
+                              <MessageContent>
+                                <MessageResponse>{part.text}</MessageResponse>
+                              </MessageContent>
+                            </Message>
+                            {isLastAssistantMessage && !isStreaming && (
+                              <MessageActions>
+                                <MessageAction
+                                  onClick={() => regenerate()}
+                                  label="Regenerate"
+                                >
+                                  <RefreshCcwIcon className="size-3" />
+                                </MessageAction>
+                                <MessageAction
+                                  onClick={() =>
+                                    navigator.clipboard.writeText(part.text)
+                                  }
+                                  label="Copy"
+                                >
+                                  <CopyIcon className="size-3" />
+                                </MessageAction>
+                              </MessageActions>
+                            )}
+                          </Fragment>
+                        );
+                      }
+
+                      // Skip all other part types
+                      return null;
+                    })}
+                  </Fragment>
+                );
+              })}
               {/* Show thinking indicator while waiting for first assistant content */}
               {isWaitingForFirstContent && <ThinkingIndicator />}
             </>
