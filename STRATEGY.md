@@ -165,9 +165,9 @@ User prompt
   networking │ devops │ security_identity (always runs)
     │
     ▼  Wave 2 pillar recommendations
-[Phase 3 — Critic Agent]
-    │  issues found? → re-run affected specialists once with feedback
-    ▼
+[Phase 3 — Validator Agent]     ←→  data/WELL_ARCHITECTED.md (injected into context)
+    │
+    ▼  Well-Architected validation report (prose)
 [Phase 4 — Synthesis Agent]
     │
     ▼
@@ -343,36 +343,53 @@ The `caveats` list is passed to the Synthesis Agent as notes.
 
 ---
 
-### Phase 3 — Critic Agent
+### Phase 3 — Validator Agent
 
-**Purpose:** Validate the full set of specialist recommendations before synthesis. A senior architect reviews a design before presenting it.
+**Purpose:** Validate the full set of specialist recommendations against a cloud-agnostic Well-Architected framework before synthesis. The validator is advisory only — it produces a prose report that is passed to the Synthesis Agent. It does not re-run any specialists and does not block or modify recommendations.
 
 **Input:** All pillar recommendations (Wave 1 + Wave 2) + Requirements Schema + selected patterns
 
-**Checks performed:**
+**Knowledge source:** `data/WELL_ARCHITECTED.md` — a cloud-agnostic Well-Architected reference distilled from the AWS (6-pillar) and Azure (5-pillar) frameworks. It covers Reliability, Security, Cost Optimization, Operational Excellence, Performance Efficiency, and Sustainability. The document is injected into the validator's system prompt at agent startup (no retrieval tool needed).
 
-1. **Integration consistency** — Do the chosen services connect? If Compute picked AWS Fargate, did Networking include an ALB and the VPC context? If the pattern is event-driven, did Integration & Messaging recommend an appropriate queue or event bus?
+**Tools available:** None. The validator reasons from injected context alone.
 
-2. **Gap detection** — Are there implied services missing from any pillar? Common gaps: no CDN despite public-facing traffic, no secrets manager despite credentials being used, no monitoring despite a production workload.
+**Checks performed across six pillars:**
 
-3. **Constraint compliance** — Does any recommendation violate the Requirements Schema? Examples: a self-managed service recommended for a team with `cloud_expertise: "low"`; a premium service recommended for a `budget: "minimal"` workload; a single-region design for a workload with high availability as its primary quality.
+1. **Reliability** — Are workloads deployed across multiple failure domains proportionate to the stated availability quality attribute? Is there a data backup strategy? Are health checks and graceful degradation patterns present?
 
-4. **Proportionality** — Is the complexity proportional to the stated scale and team? An event-driven microservices architecture recommended for a solo developer building a side project is over-engineered.
+2. **Security** — Are identities managed centrally with least privilege? Are secrets stored in a managed store, never hardcoded? Is encryption applied at rest and in transit? Are compliance requirements (HIPAA, GDPR, PCI, etc.) addressed?
+
+3. **Cost Optimization** — Is the pricing model (serverless, on-demand, reserved) matched to the traffic pattern? Is autoscaling configured? Is the cost proportionate to the stated budget?
+
+4. **Operational Excellence** — Is infrastructure defined as code? Is the operational burden proportionate to team size and cloud expertise? Are fully managed services used where `cloud_expertise` is low?
+
+5. **Performance Efficiency** — Is the database type matched to the access pattern? Is there a caching layer where justified? Can the compute layer scale to the stated peak load?
+
+6. **Sustainability** — Are managed or serverless options used where appropriate? Is autoscaling configured to release idle capacity?
+
+**Proportionality principle:** Every check is evaluated relative to the stated requirements. A single-zone deployment for a `budget: "minimal"`, `scale: "< 1k"` workload is not flagged as a reliability gap — it is proportionate. An over-engineered microservices architecture for a solo developer side project is flagged for disproportionate complexity.
 
 **Output:**
 
-```ts
-{
-  issues: {
-    severity: "blocking" | "warning",
-    affected_pillars: CategorySlug[],
-    description: string,
-    suggested_fix: string
-  }[]
-}
+A short prose report (150–350 words) structured as:
+
+```
+## Well-Architected Review
+
+[One sentence verdict.]
+
+**Strengths**
+- [2–4 bullets: what the architecture does well, grounded in actual recommendations.]
+
+**Concerns**
+- [1–3 bullets: real gaps given the stated requirements, each with a one-line mitigation hint.
+   If no meaningful concerns exist, a single bullet says so.]
+
+**Proportionality**
+[One sentence: does the complexity match the stated scale and budget?]
 ```
 
-If `issues` contains any `blocking` items, the affected specialist agents are re-run once with the critic's feedback appended to their context. `warning` items are passed to the Synthesis Agent as notes. The correction loop runs **at most once** — the critic does not loop indefinitely.
+This report is passed in full to the Synthesis Agent, which incorporates the most important findings into its Trade-offs & Caveats section. The report is not shown in raw form in the UI — the UI shows only a "Well-Architected review complete" / "Architecture validated" status indicator.
 
 ---
 
@@ -466,6 +483,6 @@ Stored alongside the chat record. Enables:
 
 4. **Dependency order is explicit.** Wave 1 specialists (compute, storage, database, analytics, ai_ml, integration_messaging, migration_hybrid) run in parallel because their decisions are independent. Wave 2 specialists (networking, devops, security_identity) run after Wave 1 because their correct answers are structurally determined by Wave 1's choices. Execution order encodes architectural dependency.
 
-5. **Every recommendation is validated.** The Critic Agent catches integration gaps, constraint violations, and disproportionate complexity before the user sees anything.
+5. **Every recommendation is validated.** The Validator Agent checks all specialist recommendations against a cloud-agnostic Well-Architected framework (Reliability, Security, Cost Optimization, Operational Excellence, Performance Efficiency, Sustainability) before the user sees anything. Validation is advisory and proportional to the stated requirements — it does not re-run specialists or block the pipeline.
 
 6. **Simplicity in retrieval, richness in reasoning.** Dense vector search with metadata filters is sufficient when queries are written by specialist agents. Retrieval complexity is traded for agent reasoning depth.

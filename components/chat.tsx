@@ -44,6 +44,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import type { ArchonAgentUIMessage } from "@/lib/agents/archon-agent";
 import type { ArchonDataTypes } from "@/lib/agents/pipeline";
 import type { PatternAgentUIMessage } from "@/lib/agents/pattern-agent";
+import type { ValidatorAgentUIMessage } from "@/lib/agents/validator-agent";
 import type { WaveOutput } from "@/lib/agents/wave-tools";
 import type { CategorySlug } from "@/lib/tools/retrieve-tool";
 import {
@@ -93,6 +94,7 @@ type RequirementsData = ArchonDataTypes["archon-requirements"];
 type PatternsData = ArchonDataTypes["archon-patterns"];
 type Wave1Data = ArchonDataTypes["archon-wave1"];
 type Wave2Data = ArchonDataTypes["archon-wave2"];
+type ValidatorData = ArchonDataTypes["archon-validator"];
 
 /** Find the last data part of a given archon type in a message's parts array. */
 function findLastDataPart<T>(
@@ -405,6 +407,42 @@ function Wave2Part({ data }: { data: Wave2Data }) {
   );
 }
 
+// ─── Validator phase renderer ─────────────────────────────────────────────────
+
+function ValidatorPart({ data }: { data: ValidatorData }) {
+  const isStreaming = data.state === "streaming";
+  const isComplete = data.state === "complete";
+
+  return (
+    <ChainOfThought
+      defaultOpen={isStreaming}
+      open={isStreaming ? true : undefined}
+      isStreaming={isStreaming}
+    >
+      <ChainOfThoughtHeader>
+        {isComplete
+          ? "Well-Architected review complete"
+          : "Reviewing against Well-Architected framework…"}
+      </ChainOfThoughtHeader>
+      <ChainOfThoughtContent>
+        {isComplete ? (
+          <ChainOfThoughtStep
+            icon={CheckCircleIcon}
+            label="Architecture validated"
+            status="complete"
+          />
+        ) : (
+          <ChainOfThoughtStep
+            icon={ShieldIcon}
+            label="Validating architecture…"
+            status="active"
+          />
+        )}
+      </ChainOfThoughtContent>
+    </ChainOfThought>
+  );
+}
+
 // ─── Main Chat component ──────────────────────────────────────────────────────
 
 /** Detect the current active phase label from the last assistant message parts. */
@@ -445,6 +483,10 @@ function useCurrentPhase(messages: ArchonAgentUIMessage[]): string | null {
             ? `Running Wave 2 specialists (${done} done)`
             : "Running Wave 2 specialists";
         }
+      }
+      if (part.type === "data-archon-validator") {
+        const d = part.data as ValidatorData;
+        if (d.state === "streaming") return "Reviewing architecture";
       }
     }
 
@@ -639,6 +681,16 @@ export function Chat({ id, initialMessages }: ChatProps) {
                             <Wave2Part
                               key={key}
                               data={part.data as Wave2Data}
+                            />
+                          );
+                        }
+
+                        // ── Validator ─────────────────────────────────────
+                        if (part.type === "data-archon-validator") {
+                          return (
+                            <ValidatorPart
+                              key={key}
+                              data={part.data as ValidatorData}
                             />
                           );
                         }
