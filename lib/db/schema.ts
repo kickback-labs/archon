@@ -127,27 +127,6 @@ export const serviceEmbedding = pgTable(
 
 export type ServiceEmbedding = typeof serviceEmbedding.$inferSelect;
 
-// ─── Decision Log ─────────────────────────────────────────────────────────────
-
-/**
- * Persists every `decisions_resolved` entry from every specialist agent.
- * Enables the UI to show "Why this service?" reasoning without re-running
- * the pipeline, and provides a training signal for future model improvement.
- */
-export const decisionLog = pgTable("decision_log", {
-  id: uuid("id").primaryKey().notNull().defaultRandom(),
-  chatId: uuid("chat_id")
-    .notNull()
-    .references(() => chat.id, { onDelete: "cascade" }),
-  pillar: text("pillar").notNull(),
-  decision: text("decision").notNull(),
-  chosen: text("chosen").notNull(),
-  rejectedAlternatives: json("rejected_alternatives")
-    .notNull()
-    .$type<string[]>()
-    .default([]),
-  rationale: text("rationale").notNull(),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
-
-export type DecisionLog = typeof decisionLog.$inferSelect;
+// ─── Decision Log table removed ───────────────────────────────────────────────
+// decisions_resolved was dropped from the specialist output schema.
+// The decision_log table has been removed from the DB via migration.

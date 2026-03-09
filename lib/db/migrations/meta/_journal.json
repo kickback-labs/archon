@@ -15,6 +15,13 @@
       "when": 1772983613197,
       "tag": "0001_fresh_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773055931656,
+      "tag": "0002_drop_decision_log",
+      "breakpoints": true
     }
   ]
 }

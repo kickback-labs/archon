@@ -70,23 +70,22 @@ import { useRouter } from "next/navigation";
 
 // ─── Pillar metadata ──────────────────────────────────────────────────────────
 
-const PILLAR_META: Record<CategorySlug, { label: string; icon: LucideIcon }> =
-  {
-    compute: { label: "Compute", icon: ServerIcon },
-    storage: { label: "Storage", icon: MonitorIcon },
-    database: { label: "Database", icon: DatabaseIcon },
-    analytics: { label: "Analytics", icon: BrainCircuitIcon },
-    ai_ml: { label: "AI / ML", icon: SparklesIcon },
-    integration_messaging: {
-      label: "Integration & Messaging",
-      icon: MessageSquareIcon,
-    },
-    migration_hybrid: { label: "Migration & Hybrid", icon: TruckIcon },
-    other: { label: "Other Services", icon: LayersIcon },
-    networking: { label: "Networking", icon: NetworkIcon },
-    devops: { label: "DevOps", icon: GitBranchIcon },
-    security_identity: { label: "Security & Identity", icon: ShieldIcon },
-  };
+const PILLAR_META: Record<CategorySlug, { label: string; icon: LucideIcon }> = {
+  compute: { label: "Compute", icon: ServerIcon },
+  storage: { label: "Storage", icon: MonitorIcon },
+  database: { label: "Database", icon: DatabaseIcon },
+  analytics: { label: "Analytics", icon: BrainCircuitIcon },
+  ai_ml: { label: "AI / ML", icon: SparklesIcon },
+  integration_messaging: {
+    label: "Integration & Messaging",
+    icon: MessageSquareIcon,
+  },
+  migration_hybrid: { label: "Migration & Hybrid", icon: TruckIcon },
+  other: { label: "Other Services", icon: LayersIcon },
+  networking: { label: "Networking", icon: NetworkIcon },
+  devops: { label: "DevOps", icon: GitBranchIcon },
+  security_identity: { label: "Security & Identity", icon: ShieldIcon },
+};
 
 // ─── Attachment display ───────────────────────────────────────────────────────
 
@@ -346,7 +345,9 @@ function Wave1ToolPart({
   const isComplete = part.state === "output-available" && !part.preliminary;
 
   const waveOutput: WaveOutput =
-    part.state === "output-available" ? (part.output as WaveOutput) ?? {} : {};
+    part.state === "output-available"
+      ? ((part.output as WaveOutput) ?? {})
+      : {};
 
   // When complete, only show the pillars that actually ran
   const pillarsToShow: CategorySlug[] =
@@ -374,7 +375,7 @@ function Wave1ToolPart({
         <ChainOfThoughtContent>
           <ChainOfThoughtStep
             icon={ServerIcon}
-            label="Preparing specialists…"
+            label="Delegating tasks…"
             status="active"
           />
         </ChainOfThoughtContent>
@@ -413,7 +414,9 @@ function Wave2ToolPart({
   const isComplete = part.state === "output-available" && !part.preliminary;
 
   const waveOutput: WaveOutput =
-    part.state === "output-available" ? (part.output as WaveOutput) ?? {} : {};
+    part.state === "output-available"
+      ? ((part.output as WaveOutput) ?? {})
+      : {};
 
   const doneCount = Object.keys(waveOutput).length;
   const totalCount = WAVE2_PILLARS.length;
@@ -435,7 +438,7 @@ function Wave2ToolPart({
         <ChainOfThoughtContent>
           <ChainOfThoughtStep
             icon={NetworkIcon}
-            label="Preparing specialists…"
+            label="Delegating tasks…"
             status="active"
           />
         </ChainOfThoughtContent>
@@ -458,7 +461,12 @@ function useCurrentPhase(messages: ArchonAgentUIMessage[]): string | null {
     const last = messages.findLast((m) => m.role === "assistant");
     if (!last) return null;
 
-    const parts = last.parts as Array<{ type: string; state?: string; preliminary?: boolean; output?: unknown }>;
+    const parts = last.parts as Array<{
+      type: string;
+      state?: string;
+      preliminary?: boolean;
+      output?: unknown;
+    }>;
 
     // Scan parts from the end to find the most-recent in-progress tool
     for (let i = parts.length - 1; i >= 0; i--) {
@@ -470,17 +478,29 @@ function useCurrentPhase(messages: ArchonAgentUIMessage[]): string | null {
 
       if (!isActive) continue;
 
-      if (part.type === "tool-run_requirements_agent") return "Extracting requirements";
-      if (part.type === "tool-run_pattern_agent") return "Selecting architectural patterns";
+      if (part.type === "tool-run_requirements_agent")
+        return "Extracting requirements";
+      if (part.type === "tool-run_pattern_agent")
+        return "Selecting architectural patterns";
       if (part.type === "tool-run_wave1_specialists") {
-        const out = part.state === "output-available" ? (part.output as WaveOutput) ?? {} : {};
+        const out =
+          part.state === "output-available"
+            ? ((part.output as WaveOutput) ?? {})
+            : {};
         const done = Object.keys(out).length;
-        return done > 0 ? `Running Wave 1 specialists (${done} done)` : "Running Wave 1 specialists";
+        return done > 0
+          ? `Running Wave 1 specialists (${done} done)`
+          : "Running Wave 1 specialists";
       }
       if (part.type === "tool-run_wave2_specialists") {
-        const out = part.state === "output-available" ? (part.output as WaveOutput) ?? {} : {};
+        const out =
+          part.state === "output-available"
+            ? ((part.output as WaveOutput) ?? {})
+            : {};
         const done = Object.keys(out).length;
-        return done > 0 ? `Running Wave 2 specialists (${done} done)` : "Running Wave 2 specialists";
+        return done > 0
+          ? `Running Wave 2 specialists (${done} done)`
+          : "Running Wave 2 specialists";
       }
     }
 
@@ -546,9 +566,7 @@ export function Chat({ id, initialMessages }: ChatProps) {
 
   // Determine if we're waiting for the very first content (submitted but no assistant parts yet)
   const lastMessage = messages[messages.length - 1];
-  const isWaitingForFirstContent =
-    isStreaming &&
-    lastMessage?.role === "user";
+  const isWaitingForFirstContent = isStreaming && lastMessage?.role === "user";
 
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text?.trim());

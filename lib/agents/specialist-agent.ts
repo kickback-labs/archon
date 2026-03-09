@@ -8,8 +8,7 @@ import { retrieveTool, type CategorySlug } from "@/lib/tools/retrieve-tool";
 
 // ─── Pillar Recommendation output schema (for agent instructions) ─────────────
 
-export const PILLAR_RECOMMENDATION_SCHEMA = `
-{
+export const PILLAR_RECOMMENDATION_SCHEMA = `{
   "pillar": "<category_slug>",
   "services": [
     {
@@ -17,14 +16,6 @@ export const PILLAR_RECOMMENDATION_SCHEMA = `
       "service_name": "Service Name",
       "role": "e.g. primary API compute",
       "justification": "Why this service for this workload"
-    }
-  ],
-  "decisions_resolved": [
-    {
-      "decision": "e.g. VM vs container vs FaaS",
-      "chosen": "e.g. Container (Fargate)",
-      "rejected_alternatives": ["EC2", "Lambda"],
-      "rationale": "Why the chosen option fits better"
     }
   ],
   "caveats": ["Any gotchas, limits, or conditions to watch"]
@@ -143,48 +134,61 @@ function buildSpecialistInstructions(
       ? `
 ## Wave 2 Context
 
-You are a Wave 2 specialist. Your recommendations depend on Wave 1 choices. You will receive all Wave 1 pillar recommendations in your prompt. Read them carefully — your retrieval query and decisions must be grounded in the specific services Wave 1 selected, not generic pattern keywords.
+You are a Wave 2 specialist. Your pillar (${pillar}) is structurally dependent on what Wave 1 chose. You will receive the full Wave 1 recommendations in your prompt. Read them carefully — your retrieval query and every decision you make must be grounded in the specific services Wave 1 already selected. Do NOT reason in a vacuum. Do NOT ignore the Wave 1 context.
 `
       : "";
 
-  return `You are a specialist cloud architect agent for the **${pillar}** architectural pillar. You are part of Phase 2 of the Archon pipeline.
+  return `You are the ${pillar} specialist cloud architect agent. You are part of Phase 2 of the Archon pipeline.
 ${wave2Context}
-## Your reasoning guidance
+## Mandatory Execution Rules
+
+These rules are NON-NEGOTIABLE. Violating any of them is a pipeline failure.
+
+1. **You MUST call \`retrieve\` exactly once.** Do NOT skip it. Do NOT reason about services without first retrieving the relevant documents. Do NOT call it more than once. Producing output without calling \`retrieve\` is a critical error.
+2. **Your retrieval query must be specific and context-grounded.** It must reflect the architectural pattern in use, the specific decision you are resolving, and the relevant constraints (scale, budget, managed preference, providers). Do NOT use a generic query like "cloud services for ${pillar}". Do NOT use the raw user message as the query.
+3. **Do NOT add \`managed\` or \`pricing_model\` filters to the retrieve call.** These filters are unreliable and have been removed. Only use \`query\`, \`pillar\`, and optionally \`providers\` and \`top_k\`.
+4. **Your final response MUST be ONLY the raw JSON object** — no markdown fences, no preamble, no explanation. Output JSON immediately after reasoning is complete.
+5. **\`pillar\` in your output MUST be exactly \`"${pillar}"\`.** Do NOT change it.
+6. **\`services\` must list every service you recommend.** Do NOT leave it empty. If you recommend multiple services (e.g. primary + cache), list all of them.
+
+---
+
+## Your Reasoning Guidance
 
 ${guidance}
 
-## Your process
+---
 
-You will receive:
-- A Requirements Schema (structured JSON)
-- Selected architectural patterns with justifications
-- Implied pillars list${wave === 2 ? "\n- All Wave 1 pillar recommendations (full objects)" : ""}
+## Your Process
 
 **Step 1 — Formulate a retrieval query**
-Write a precise, context-grounded query that captures:
-- The architectural pattern in use
-- The specific decision you're trying to resolve
-- Relevant constraints from the Requirements Schema (scale, budget, managed preference, providers)
 
-Do NOT use the raw user prompt as the query. The query must reflect what you already know about the system.
+Write a precise, context-grounded query that encodes:
+- The architectural pattern in use (from the Pattern Output)
+- The specific decision you are resolving for the ${pillar} pillar
+- Key constraints from the Requirements Schema (scale, budget, managed preference, providers)
 
-**Step 2 — Call retrieve() EXACTLY ONCE**
-Pass your query along with the pillar (always "${pillar}"), optional provider filter, and optional managed/pricing_model filters. You will receive all Tier-1 docs plus the top-5 semantic matches.
+Example of a BAD query: \`"${pillar} services"\`
+Example of a GOOD query: \`"serverless container compute for event-driven microservices, burst scaling, moderate budget, AWS"\`
+
+**Step 2 — Call \`retrieve\` EXACTLY ONCE**
+
+Call \`retrieve\` with:
+- \`query\`: your context-grounded query from Step 1
+- \`pillar\`: always \`"${pillar}"\`
+- \`providers\` (optional): only if the Requirements Schema specifies a provider preference
+
+Do NOT add any other parameters. Do NOT call \`retrieve\` again after this.
 
 **Step 3 — Reason and decide**
-Read the returned documents (including any equivalence notes). Reason about the options against the requirements and pattern. Select the best service(s) for this pillar. For each major decision (e.g. VM vs container vs FaaS), document what you chose, what you rejected, and why.
+
+Read every returned document. For each service, consider how it fits the pattern, the requirements, and the constraints. Choose the best option(s) for this pillar. Document every meaningful decision with what you chose, what you rejected, and why.
 
 **Step 4 — Output**
-Produce your final response as a JSON object with exactly this shape:
 
-${PILLAR_RECOMMENDATION_SCHEMA}
+Output the JSON immediately. No preamble. No markdown fences.
 
-Rules:
-- \`pillar\` must be exactly "${pillar}"
-- \`services\` must list every service you recommend (can be multiple, e.g. primary + cache)
-- \`decisions_resolved\` must document every meaningful architectural choice you made
-- \`caveats\` should call out any gotchas, scaling limits, or conditions to watch
-- Your final message must be ONLY the JSON object — no markdown fences, no preamble. Just raw JSON.`;
+${PILLAR_RECOMMENDATION_SCHEMA}`;
 }
 
 // ─── Specialist agent factory ─────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import type { UIMessage } from "ai";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "./index";
-import { chat, message, decisionLog } from "./schema";
+import { chat, message } from "./schema";
 
 // ─── Chats ────────────────────────────────────────────────────────────────────
 
@@ -95,43 +95,4 @@ export async function upsertMessages({
         attachments: sql`excluded.attachments`,
       },
     });
-}
-
-// ─── Decision Log ─────────────────────────────────────────────────────────────
-
-export interface DecisionLogEntry {
-  pillar: string;
-  decision: string;
-  chosen: string;
-  rejected_alternatives: string[];
-  rationale: string;
-}
-
-/**
- * Insert decision log entries for a completed chat.
- * Called from the API route's onFinish callback after each run.
- * Uses INSERT … ON CONFLICT DO NOTHING since entries are immutable once written.
- */
-export async function upsertDecisionLog({
-  chatId,
-  entries,
-}: {
-  chatId: string;
-  entries: DecisionLogEntry[];
-}) {
-  if (entries.length === 0) return;
-
-  await db
-    .insert(decisionLog)
-    .values(
-      entries.map((e) => ({
-        chatId,
-        pillar: e.pillar,
-        decision: e.decision,
-        chosen: e.chosen,
-        rejectedAlternatives: e.rejected_alternatives,
-        rationale: e.rationale,
-      })),
-    )
-    .onConflictDoNothing();
 }

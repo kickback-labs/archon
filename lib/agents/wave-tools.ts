@@ -102,24 +102,40 @@ async function* runSpecialistsIncrementally(
 const wave1InputSchema = z.object({
   implied_pillars: z
     .array(z.enum(WAVE1_PILLARS as [CategorySlug, ...CategorySlug[]]))
+    .min(1)
     .describe(
-      "The Wave 1 pillars to run, derived from the Pattern Agent's implied_pillars output. " +
-        "Only include pillars that appear in both this list and the Wave 1 pillar set.",
+      "The Wave 1 pillars to run. MUST be taken directly from the Pattern Agent's " +
+        "implied_pillars output — do NOT add pillars that were not in that list, and do NOT " +
+        "include Wave 2 pillars (networking, devops, security_identity). Valid Wave 1 values: " +
+        "compute, storage, database, analytics, ai_ml, integration_messaging, migration_hybrid, other.",
     ),
   requirements_schema: z
     .string()
-    .describe("The Requirements Schema JSON produced by the Requirements Agent."),
+    .min(10)
+    .describe(
+      "The complete Requirements Schema JSON string produced by the Requirements Agent. " +
+        "Must be the actual JSON — NEVER a placeholder like '{...}' or '<schema here>'. " +
+        "Copy the full JSON output from run_requirements_agent verbatim.",
+    ),
   pattern_output: z
     .string()
-    .describe("The Pattern Agent's JSON output (patterns + implied_pillars)."),
+    .min(10)
+    .describe(
+      "The complete Pattern Agent JSON output string (patterns + implied_pillars). " +
+        "Must be the actual JSON — NEVER a placeholder like '{...}' or '<pattern here>'. " +
+        "Copy the full JSON output from run_pattern_agent verbatim.",
+    ),
 });
 
 export const wave1SpecialistsTool = tool({
   description:
-    "Run all applicable Wave 1 specialist agents in parallel. Wave 1 specialists are independent — " +
-    "compute, storage, database, analytics, ai_ml, integration_messaging, migration_hybrid, other. " +
-    "Each specialist retrieves relevant service documents and produces a Pillar Recommendation. " +
-    "Runs only the pillars that appear in implied_pillars. Returns all recommendations as a combined record.",
+    "Run all applicable Wave 1 specialist agents in parallel. " +
+    "Wave 1 specialists are independent and cover: compute, storage, database, analytics, " +
+    "ai_ml, integration_messaging, migration_hybrid, other. " +
+    "Only runs the pillars present in implied_pillars — do NOT add extra pillars. " +
+    "Each specialist calls retrieve() internally and produces a Pillar Recommendation. " +
+    "IMPORTANT: requirements_schema and pattern_output must be the actual JSON strings " +
+    "from the previous steps — never placeholders or summaries.",
   inputSchema: wave1InputSchema,
   execute: async function* (
     { implied_pillars, requirements_schema, pattern_output },
@@ -130,9 +146,22 @@ export const wave1SpecialistsTool = tool({
       (p) => p in wave1Specialists,
     ) as (keyof typeof wave1Specialists)[];
 
-    // Build per-specialist prompts
+    // Build per-specialist prompts — inject the full context so each specialist
+    // has everything it needs to formulate a precise retrieval query and recommendation.
     const buildPrompt = (pillar: string) =>
-      `## Requirements Schema\n${requirements_schema}\n\n## Pattern Output\n${pattern_output}\n\n## Your Pillar\nYou are the ${pillar} specialist. Analyse the above and produce your pillar recommendation.`;
+      [
+        "## Requirements Schema",
+        requirements_schema,
+        "",
+        "## Pattern Output",
+        pattern_output,
+        "",
+        `## Your Pillar: ${pillar}`,
+        `You are the ${pillar} specialist. Using the Requirements Schema and Pattern Output above, ` +
+          `follow your mandatory process: (1) formulate a precise retrieval query, ` +
+          `(2) call retrieve() exactly once, (3) reason over the returned documents, ` +
+          `(4) output your pillar recommendation as raw JSON.`,
+      ].join("\n");
 
     // Launch all specialists in parallel immediately
     const specialistEntries = pillarsToRun.map((pillar) => ({
@@ -166,32 +195,60 @@ export const wave1SpecialistsTool = tool({
 const wave2InputSchema = z.object({
   wave1_recommendations: z
     .string()
+    .min(10)
     .describe(
-      "JSON string containing all Wave 1 pillar recommendations, keyed by pillar slug. " +
-        "Wave 2 specialists read this to ground their decisions in the specific services already chosen.",
+      "The complete JSON string of all Wave 1 pillar recommendations, keyed by pillar slug. " +
+        "Must be the actual JSON returned by run_wave1_specialists — NEVER a placeholder " +
+        "like '{...}' or '<wave1 results here>'. Copy the full JSON verbatim.",
     ),
   requirements_schema: z
     .string()
-    .describe("The Requirements Schema JSON produced by the Requirements Agent."),
+    .min(10)
+    .describe(
+      "The complete Requirements Schema JSON string produced by the Requirements Agent. " +
+        "Must be the actual JSON — NEVER a placeholder. Same string passed to Wave 1.",
+    ),
   pattern_output: z
     .string()
-    .describe("The Pattern Agent's JSON output (patterns + implied_pillars)."),
+    .min(10)
+    .describe(
+      "The complete Pattern Agent JSON output string (patterns + implied_pillars). " +
+        "Must be the actual JSON — NEVER a placeholder. Same string passed to Wave 1.",
+    ),
 });
 
 export const wave2SpecialistsTool = tool({
   description:
     "Run all three Wave 2 specialist agents in parallel: networking, devops, security_identity. " +
-    "Wave 2 specialists are reactive — their recommendations depend on what Wave 1 chose. " +
+    "Wave 2 specialists are reactive — their recommendations are grounded in what Wave 1 chose. " +
     "security_identity always runs regardless of implied_pillars. " +
-    "Each specialist reads the Wave 1 recommendations, retrieves relevant service documents, " +
-    "and produces a Pillar Recommendation. Returns all three recommendations as a combined record.",
+    "Each specialist reads the Wave 1 recommendations, calls retrieve() internally, " +
+    "and produces a Pillar Recommendation. " +
+    "IMPORTANT: all three string inputs must be actual JSON from previous steps — never placeholders.",
   inputSchema: wave2InputSchema,
   execute: async function* (
     { wave1_recommendations, requirements_schema, pattern_output },
     { abortSignal },
   ) {
     const buildPrompt = (pillar: string) =>
-      `## Requirements Schema\n${requirements_schema}\n\n## Pattern Output\n${pattern_output}\n\n## Wave 1 Recommendations\n${wave1_recommendations}\n\n## Your Pillar\nYou are the ${pillar} specialist. Read the Wave 1 recommendations carefully — your decisions must be grounded in the specific services already chosen. Produce your pillar recommendation.`;
+      [
+        "## Requirements Schema",
+        requirements_schema,
+        "",
+        "## Pattern Output",
+        pattern_output,
+        "",
+        "## Wave 1 Recommendations",
+        wave1_recommendations,
+        "",
+        `## Your Pillar: ${pillar}`,
+        `You are the ${pillar} specialist. Read the Wave 1 Recommendations above carefully — ` +
+          `your retrieval query and every decision you make must be grounded in the specific ` +
+          `services Wave 1 already selected. Follow your mandatory process: ` +
+          `(1) formulate a precise retrieval query based on Wave 1 choices, ` +
+          `(2) call retrieve() exactly once, (3) reason over the returned documents in the ` +
+          `context of the full Wave 1 picture, (4) output your pillar recommendation as raw JSON.`,
+      ].join("\n");
 
     // All three Wave 2 specialists always run in parallel
     const specialistEntries = (

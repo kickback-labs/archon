@@ -8,10 +8,7 @@ import {
   getMessagesByChatId,
   updateChatTitle,
   upsertMessages,
-  upsertDecisionLog,
-  type DecisionLogEntry,
 } from "@/lib/db/queries";
-import type { WaveOutput } from "@/lib/agents/wave-tools";
 import { createAgentUIStreamResponse, generateId, type UIMessage } from "ai";
 import { headers } from "next/headers";
 
@@ -60,64 +57,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // Extract decisions_resolved from all wave tool outputs and persist them
-      const decisionEntries: DecisionLogEntry[] = [];
-
-      for (const msg of finishedMessages as ArchonAgentUIMessage[]) {
-        for (const part of msg.parts) {
-          if (
-            part.type !== "tool-run_wave1_specialists" &&
-            part.type !== "tool-run_wave2_specialists"
-          ) {
-            continue;
-          }
-          if (part.state !== "output-available") continue;
-
-          const waveOutput = part.output as WaveOutput;
-          if (!waveOutput) continue;
-
-          for (const [pillar, specialistMsg] of Object.entries(waveOutput)) {
-            if (!specialistMsg) continue;
-
-            // The specialist's final message is the raw JSON text part
-            const lastTextPart = specialistMsg.parts.findLast(
-              (p) => p.type === "text",
-            );
-            if (!lastTextPart || lastTextPart.type !== "text") continue;
-
-            let pillarRec: {
-              decisions_resolved?: Array<{
-                decision: string;
-                chosen: string;
-                rejected_alternatives: string[];
-                rationale: string;
-              }>;
-            };
-
-            try {
-              pillarRec = JSON.parse(lastTextPart.text);
-            } catch {
-              continue;
-            }
-
-            for (const d of pillarRec.decisions_resolved ?? []) {
-              decisionEntries.push({
-                pillar,
-                decision: d.decision,
-                chosen: d.chosen,
-                rejected_alternatives: d.rejected_alternatives ?? [],
-                rationale: d.rationale,
-              });
-            }
-          }
-        }
-      }
-
-      // Persist messages and decision log entries in parallel
-      await Promise.all([
-        upsertMessages({ chatId: id, messages: finishedMessages }),
-        upsertDecisionLog({ chatId: id, entries: decisionEntries }),
-      ]);
+      await upsertMessages({ chatId: id, messages: finishedMessages });
     },
   });
 }

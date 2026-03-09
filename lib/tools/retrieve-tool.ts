@@ -22,23 +22,26 @@ export type CategorySlug = (typeof CATEGORY_SLUGS)[number];
  * A tool that wraps the retrieve() function for use by specialist agents.
  *
  * Tier-1 handling is transparent to the caller — retrieve() always fetches
- * all Tier-1 docs for the pillar unconditionally, then performs RAG on
- * Tier-2/3 docs for the top_k semantic results. Specialists only need to
- * specify their query, pillar, and optional provider/managed filters.
+ * ALL Tier-1 docs for the pillar (scoped to the requested providers), then
+ * performs RAG on Tier-2/3 docs for the top_k semantic results. The merged
+ * result is: all T1 docs first, then the top_k T2/T3 semantic matches.
+ *
+ * Specialists call this exactly once per invocation.
  */
 export const retrieveTool = tool({
   description:
     "Retrieve cloud service documents relevant to a specific architectural decision. " +
-    "Always returns all Tier-1 (foundational) services for the pillar, plus the top " +
-    "semantically matching Tier-2/3 services. Call this exactly once per specialist " +
-    "invocation with a precise, context-grounded query — not the raw user prompt.",
+    "Always returns ALL Tier-1 (foundational) services for the pillar, plus the top 5 " +
+    "semantically matching Tier-2/3 services. Call this exactly ONCE per specialist " +
+    "invocation with a precise, context-grounded query — not the raw user prompt. " +
+    "Do NOT add filters for managed status or pricing model — those are handled internally.",
   inputSchema: z.object({
     query: z
       .string()
       .describe(
         "A precise retrieval query grounded in the selected architectural pattern and " +
           "requirements. Example: 'serverless container compute for event-driven microservices " +
-          "with burst scaling, managed, moderate budget'.",
+          "with burst scaling, moderate budget'.",
       ),
     pillar: z
       .enum(CATEGORY_SLUGS)
@@ -49,36 +52,9 @@ export const retrieveTool = tool({
       .describe(
         "Restrict results to specific cloud providers. Omit to search all providers.",
       ),
-    filters: z
-      .object({
-        managed: z
-          .boolean()
-          .optional()
-          .describe(
-            "Filter by whether the service is fully managed by the provider.",
-          ),
-        pricing_model: z
-          .string()
-          .optional()
-          .describe(
-            "Filter by pricing model: 'on-demand', 'serverless', 'reserved', 'per-request', 'subscription'.",
-          ),
-      })
-      .optional()
-      .describe("Optional metadata filters to narrow the search."),
-    top_k: z
-      .number()
-      .int()
-      .min(1)
-      .max(10)
-      .optional()
-      .describe(
-        "Maximum number of Tier-2/3 semantic results to return (default 5). " +
-          "Tier-1 docs are always included regardless of this value.",
-      ),
   }),
-  execute: async ({ query, pillar, providers, filters, top_k }) => {
-    const docs = await retrieve({ query, pillar, providers, filters, top_k });
+  execute: async ({ query, pillar, providers }) => {
+    const docs = await retrieve({ query, pillar, providers, top_k: 5 });
     return { documents: docs };
   },
 });

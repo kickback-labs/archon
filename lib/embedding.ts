@@ -36,10 +36,6 @@ export type RetrieveOptions = {
   query: string;
   pillar: string; // CategorySlug — scopes to one service_category
   providers?: string[]; // [] or omitted = all providers
-  filters?: {
-    managed?: boolean;
-    pricing_model?: string;
-  };
   top_k?: number; // defaults to 5; applies only to Tier-2/3 semantic search
 };
 
@@ -60,38 +56,29 @@ export type RetrievedDocument = {
  * Retrieve service documents for a given query.
  *
  * Strategy:
- * 1. Always fetch ALL Tier-1 docs for the pillar (metadata filter only, no
- *    similarity threshold). These are foundational — every architect must
+ * 1. Always fetch ALL Tier-1 docs for the pillar (optionally scoped to the
+ *    requested providers). These are foundational — every architect must
  *    consider them when the category is active.
  * 2. Perform semantic RAG exclusively on Tier-2 and Tier-3 docs, returning
- *    the top `top_k` (default 5) by cosine similarity.
+ *    the top `top_k` (default 5) by cosine similarity, excluding already-
+ *    fetched Tier-1 IDs.
  * 3. Merge: Tier-1 docs first, then Tier-2/3 semantic results (de-duplicated
  *    by id to guard against any overlap).
  */
 export async function retrieve(
   opts: RetrieveOptions,
 ): Promise<RetrievedDocument[]> {
-  const { query, pillar, providers = [], filters = {}, top_k = 5 } = opts;
+  const { query, pillar, providers = [], top_k = 5 } = opts;
 
-  // Build shared provider + managed conditions (reused in both queries)
+  // Optional provider condition — reused in both queries
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sharedConditions: any[] = [];
-  if (providers.length > 0) {
-    sharedConditions.push(
-      inArray(
-        serviceEmbedding.cloudProvider,
-        providers as ("AWS" | "Azure" | "GCP")[],
-      ),
-    );
-  }
-  if (filters.managed !== undefined) {
-    sharedConditions.push(eq(serviceEmbedding.managed, filters.managed));
-  }
-  if (filters.pricing_model) {
-    sharedConditions.push(
-      eq(serviceEmbedding.pricingModel, filters.pricing_model),
-    );
-  }
+  const providerCondition =
+    providers.length > 0
+      ? inArray(
+          serviceEmbedding.cloudProvider,
+          providers as ("AWS" | "Azure" | "GCP")[],
+        )
+      : undefined;
 
   // ── 1. Tier-1 fetch (always, no similarity threshold) ────────────────────
   const tier1Results = await db
@@ -112,7 +99,7 @@ export async function retrieve(
       and(
         eq(serviceEmbedding.serviceCategory, pillar),
         eq(serviceEmbedding.tier, 1),
-        ...sharedConditions,
+        providerCondition,
       ),
     );
 
@@ -135,7 +122,8 @@ export async function retrieve(
     ...(tier1Ids.length > 0
       ? [notInArray(serviceEmbedding.id, tier1Ids)]
       : []),
-    ...sharedConditions,
+    // Scope to requested providers if specified
+    ...(providerCondition ? [providerCondition] : []),
   ];
 
   const semanticResults = await db
