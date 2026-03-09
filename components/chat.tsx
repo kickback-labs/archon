@@ -546,124 +546,145 @@ export function Chat({ id, initialMessages }: ChatProps) {
             />
           ) : (
             <>
-              {messages.map((message, messageIndex) => {
-                // For assistant messages, deduplicate data-archon-* parts:
-                // only render the *last* part of each type (which holds the
-                // latest snapshot), skipping intermediate incremental updates.
-                // We track the original index so keys stay stable across renders.
-                const lastIndexByType = new Map<string, number>();
-                if (message.role === "assistant") {
-                  message.parts.forEach((part, idx) => {
-                    if (part.type.startsWith("data-archon-")) {
-                      lastIndexByType.set(part.type, idx);
-                    }
-                  });
-                }
-                const partsToRender =
-                  message.role === "assistant"
-                    ? message.parts
-                        .map((part, idx) => ({ part, idx }))
-                        .filter(({ part, idx }) => {
-                          if (part.type.startsWith("data-archon-")) {
-                            // Only render the last occurrence of each type
-                            return lastIndexByType.get(part.type) === idx;
-                          }
-                          return true;
-                        })
-                    : message.parts.map((part, idx) => ({ part, idx }));
-
-                return (
-                  <Fragment key={message.id}>
-                    {partsToRender.map(({ part, idx }) => {
-                      // For data-archon-* parts we use the type string as key
-                      // (unique per message) so React updates in place instead
-                      // of remounting when the last-occurrence index shifts.
-                      // For all other parts, use the original index.
-                      const key = part.type.startsWith("data-archon-")
-                        ? `${message.id}-${part.type}`
-                        : `${message.id}-${idx}`;
-
-                      // ── Requirements phase ─────────────────────────────
-                      if (part.type === "data-archon-requirements") {
-                        return (
-                          <RequirementsPart
-                            key={key}
-                            data={part.data as RequirementsData}
-                          />
-                        );
-                      }
-
-                      // ── Pattern phase ──────────────────────────────────
-                      if (part.type === "data-archon-patterns") {
-                        return (
-                          <PatternsPart
-                            key={key}
-                            data={part.data as PatternsData}
-                          />
-                        );
-                      }
-
-                      // ── Wave 1 ─────────────────────────────────────────
-                      if (part.type === "data-archon-wave1") {
-                        return (
-                          <Wave1Part
-                            key={key}
-                            data={part.data as Wave1Data}
-                          />
-                        );
-                      }
-
-                      // ── Wave 2 ─────────────────────────────────────────
-                      if (part.type === "data-archon-wave2") {
-                        return (
-                          <Wave2Part
-                            key={key}
-                            data={part.data as Wave2Data}
-                          />
-                        );
-                      }
-
-                      // ── Text parts ─────────────────────────────────────
-                      if (part.type === "text") {
-                        const isLastAssistantMessage =
-                          message.role === "assistant" &&
-                          messageIndex === messages.length - 1;
-
-                        return (
-                          <Fragment key={key}>
-                            <Message from={message.role}>
-                              <MessageContent>
-                                <MessageResponse>{part.text}</MessageResponse>
-                              </MessageContent>
-                            </Message>
-                            {isLastAssistantMessage && !isStreaming && (
-                              <MessageActions>
-                                <MessageAction
-                                  onClick={() => regenerate()}
-                                  label="Regenerate"
-                                >
-                                  <RefreshCcwIcon className="size-3" />
-                                </MessageAction>
-                                <MessageAction
-                                  onClick={() =>
-                                    navigator.clipboard.writeText(part.text)
-                                  }
-                                  label="Copy"
-                                >
-                                  <CopyIcon className="size-3" />
-                                </MessageAction>
-                              </MessageActions>
-                            )}
-                          </Fragment>
-                        );
-                      }
-
-                      // Skip all other part types
-                      return null;
-                    })}
-                  </Fragment>
+              {(() => {
+                // Find the index of the last assistant message that contains
+                // any data-archon-* part. Only that message should render the
+                // pipeline phase UI — all earlier assistant messages skip those
+                // parts to avoid showing duplicate phase sections when multiple
+                // pipeline runs exist in the same chat.
+                const lastPipelineMessageIndex = messages.reduce(
+                  (lastIdx, msg, idx) =>
+                    msg.role === "assistant" &&
+                    msg.parts.some((p) => p.type.startsWith("data-archon-"))
+                      ? idx
+                      : lastIdx,
+                  -1,
                 );
-              })}
+
+                return messages.map((message, messageIndex) => {
+                  // For assistant messages, deduplicate data-archon-* parts:
+                  // only render the *last* part of each type (which holds the
+                  // latest snapshot), skipping intermediate incremental updates.
+                  // We track the original index so keys stay stable across renders.
+                  const lastIndexByType = new Map<string, number>();
+                  if (message.role === "assistant") {
+                    message.parts.forEach((part, idx) => {
+                      if (part.type.startsWith("data-archon-")) {
+                        lastIndexByType.set(part.type, idx);
+                      }
+                    });
+                  }
+                  const partsToRender =
+                    message.role === "assistant"
+                      ? message.parts
+                          .map((part, idx) => ({ part, idx }))
+                          .filter(({ part, idx }) => {
+                            if (part.type.startsWith("data-archon-")) {
+                              // Only render pipeline phases for the most recent
+                              // pipeline message; skip them for older ones.
+                              if (messageIndex !== lastPipelineMessageIndex) {
+                                return false;
+                              }
+                              // Only render the last occurrence of each type
+                              return lastIndexByType.get(part.type) === idx;
+                            }
+                            return true;
+                          })
+                      : message.parts.map((part, idx) => ({ part, idx }));
+
+                  return (
+                    <Fragment key={message.id}>
+                      {partsToRender.map(({ part, idx }) => {
+                        // For data-archon-* parts we use the type string as key
+                        // (unique per message) so React updates in place instead
+                        // of remounting when the last-occurrence index shifts.
+                        // For all other parts, use the original index.
+                        const key = part.type.startsWith("data-archon-")
+                          ? `${message.id}-${part.type}`
+                          : `${message.id}-${idx}`;
+
+                        // ── Requirements phase ────────────────────────────
+                        if (part.type === "data-archon-requirements") {
+                          return (
+                            <RequirementsPart
+                              key={key}
+                              data={part.data as RequirementsData}
+                            />
+                          );
+                        }
+
+                        // ── Pattern phase ─────────────────────────────────
+                        if (part.type === "data-archon-patterns") {
+                          return (
+                            <PatternsPart
+                              key={key}
+                              data={part.data as PatternsData}
+                            />
+                          );
+                        }
+
+                        // ── Wave 1 ────────────────────────────────────────
+                        if (part.type === "data-archon-wave1") {
+                          return (
+                            <Wave1Part
+                              key={key}
+                              data={part.data as Wave1Data}
+                            />
+                          );
+                        }
+
+                        // ── Wave 2 ────────────────────────────────────────
+                        if (part.type === "data-archon-wave2") {
+                          return (
+                            <Wave2Part
+                              key={key}
+                              data={part.data as Wave2Data}
+                            />
+                          );
+                        }
+
+                        // ── Text parts ────────────────────────────────────
+                        if (part.type === "text") {
+                          const isLastAssistantMessage =
+                            message.role === "assistant" &&
+                            messageIndex === messages.length - 1;
+
+                          return (
+                            <Fragment key={key}>
+                              <Message from={message.role}>
+                                <MessageContent>
+                                  <MessageResponse>{part.text}</MessageResponse>
+                                </MessageContent>
+                              </Message>
+                              {isLastAssistantMessage && !isStreaming && (
+                                <MessageActions>
+                                  <MessageAction
+                                    onClick={() => regenerate()}
+                                    label="Regenerate"
+                                  >
+                                    <RefreshCcwIcon className="size-3" />
+                                  </MessageAction>
+                                  <MessageAction
+                                    onClick={() =>
+                                      navigator.clipboard.writeText(part.text)
+                                    }
+                                    label="Copy"
+                                  >
+                                    <CopyIcon className="size-3" />
+                                  </MessageAction>
+                                </MessageActions>
+                              )}
+                            </Fragment>
+                          );
+                        }
+
+                        // Skip all other part types
+                        return null;
+                      })}
+                    </Fragment>
+                  );
+                });
+              })()}
               {/* Show thinking indicator while waiting for first assistant content */}
               {isWaitingForFirstContent && <ThinkingIndicator />}
             </>
