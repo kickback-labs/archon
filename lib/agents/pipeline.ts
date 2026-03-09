@@ -16,6 +16,10 @@ import {
   wave2Specialists,
   type SpecialistAgentUIMessage,
 } from "./specialist-agent";
+import {
+  validatorAgent,
+  type ValidatorAgentUIMessage,
+} from "./validator-agent";
 import type { CategorySlug } from "@/lib/tools/retrieve-tool";
 import type { WaveOutput } from "./wave-tools";
 
@@ -41,6 +45,11 @@ export type ArchonDataTypes = {
   "archon-wave1": WaveOutput & { complete?: boolean };
   /** Emitted incrementally as wave 2 specialists complete */
   "archon-wave2": WaveOutput & { complete?: boolean };
+  /** Emitted when the validator phase starts/finishes */
+  "archon-validator": {
+    state: "streaming" | "complete";
+    output?: ValidatorAgentUIMessage;
+  };
 };
 
 export type ArchonUIMessage = UIMessage<unknown, ArchonDataTypes>;
@@ -138,6 +147,29 @@ function buildWave2Prompt(
       `(1) formulate a precise retrieval query based on Wave 1 choices, ` +
       `(2) call retrieve() exactly once, (3) reason over the returned documents in the ` +
       `context of the full Wave 1 picture, (4) output your pillar recommendation as raw JSON.`,
+  ].join("\n");
+}
+
+function buildValidatorPrompt(
+  requirementsJson: string,
+  patternJson: string,
+  wave1Json: string,
+  wave2Json: string,
+): string {
+  return [
+    "## Requirements Schema",
+    requirementsJson,
+    "",
+    "## Pattern Analysis",
+    patternJson,
+    "",
+    "## Wave 1 Pillar Recommendations",
+    wave1Json,
+    "",
+    "## Wave 2 Pillar Recommendations",
+    wave2Json,
+    "",
+    "Review all of the above against the Well-Architected framework and produce your report.",
   ].join("\n");
 }
 
@@ -250,16 +282,17 @@ function extractUserPrompt(uiMessages: UIMessage[]): string {
 // ─── Main pipeline ────────────────────────────────────────────────────────────
 
 /**
- * Run the full 5-phase Archon pipeline deterministically.
+ * Run the full Archon pipeline deterministically.
  *
  * Data flows as in-memory values between phases — no LLM orchestrator between
  * phases means no token-by-token JSON copying across tool call boundaries.
  *
  * Phase progress is surfaced as typed data parts in the UIMessage stream:
- *   data-archon-requirements  →  RequirementsAgentToolPart equivalent
- *   data-archon-patterns      →  PatternAgentToolPart equivalent
- *   data-archon-wave1         →  Wave1ToolPart equivalent (incremental)
- *   data-archon-wave2         →  Wave2ToolPart equivalent (incremental)
+ *   data-archon-requirements  →  Phase 0: Requirements extraction
+ *   data-archon-patterns      →  Phase 1: Pattern selection
+ *   data-archon-wave1         →  Phase 2a: Independent specialist wave (incremental)
+ *   data-archon-wave2         →  Phase 2b: Reactive specialist wave (incremental)
+ *   data-archon-validator     →  Phase 3: Well-Architected validation report
  */
 export function runArchonPipeline({
   uiMessages,
@@ -454,7 +487,43 @@ export function runArchonPipeline({
       }
       const wave2Json = JSON.stringify(wave2Summary, null, 2);
 
-      // ── Phase 3/4: Synthesis ───────────────────────────────────────────
+      // ── Phase 3: Validator Agent ───────────────────────────────────────
+      writer.write({
+        type: "data-archon-validator",
+        id: "phase-validator",
+        data: { state: "streaming" },
+      });
+
+      const valResult = await validatorAgent.stream({
+        prompt: buildValidatorPrompt(
+          requirementsJson,
+          patternJson,
+          wave1Json,
+          wave2Json,
+        ),
+        abortSignal,
+      });
+
+      const valMessage =
+        await streamAgentWithMilestones<ValidatorAgentUIMessage>(
+          valResult.toUIMessageStream(),
+          (msg: ValidatorAgentUIMessage) => {
+            writer.write({
+              type: "data-archon-validator",
+              id: "phase-validator",
+              data: { state: "streaming", output: msg },
+            });
+          },
+        );
+      const validatorReport = extractLastText(valMessage);
+
+      writer.write({
+        type: "data-archon-validator",
+        id: "phase-validator",
+        data: { state: "complete", output: valMessage },
+      });
+
+      // ── Phase 4: Synthesis ─────────────────────────────────────────────
       const synthesisPrompt = [
         "## Requirements Schema",
         requirementsJson,
@@ -468,7 +537,10 @@ export function runArchonPipeline({
         "## Wave 2 Pillar Recommendations",
         wave2Json,
         "",
-        "Now write the final architectural response.",
+        "## Well-Architected Validation Report",
+        validatorReport,
+        "",
+        "Now write the final architectural response. Where the Well-Architected Validation Report identifies strengths or concerns, incorporate the most important ones into your Trade-offs & Caveats section.",
       ].join("\n");
 
       const synthesisResult = streamText({
