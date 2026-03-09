@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+--> statement-breakpoint
 CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
@@ -30,6 +32,21 @@ CREATE TABLE "message" (
 	"parts" json NOT NULL,
 	"attachments" json DEFAULT '[]'::json NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "service_embedding" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"cloud_provider" varchar NOT NULL,
+	"service_category" text NOT NULL,
+	"service_name" text NOT NULL,
+	"pricing_model" text NOT NULL,
+	"managed" boolean NOT NULL,
+	"tier" integer NOT NULL,
+	"content" text NOT NULL,
+	"file_path" text NOT NULL,
+	"embedding" vector(1536) NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "service_embedding_file_path_unique" UNIQUE("file_path")
 );
 --> statement-breakpoint
 CREATE TABLE "session" (
@@ -67,4 +84,8 @@ CREATE TABLE "verification" (
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "chat" ADD CONSTRAINT "chat_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "message" ADD CONSTRAINT "message_chat_id_chat_id_fk" FOREIGN KEY ("chat_id") REFERENCES "public"."chat"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "service_embedding_hnsw_idx" ON "service_embedding" USING hnsw ("embedding" vector_cosine_ops);--> statement-breakpoint
+CREATE INDEX "service_embedding_provider_idx" ON "service_embedding" USING btree ("cloud_provider");--> statement-breakpoint
+CREATE INDEX "service_embedding_category_idx" ON "service_embedding" USING btree ("service_category");--> statement-breakpoint
+CREATE INDEX "service_embedding_tier_idx" ON "service_embedding" USING btree ("tier");
