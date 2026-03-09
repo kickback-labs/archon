@@ -11,12 +11,13 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { BrainIcon, ChevronDownIcon, DotIcon } from "lucide-react";
+import { BrainIcon, ChevronDownIcon, DotIcon, LoaderCircleIcon } from "lucide-react";
 import { createContext, memo, useContext, useMemo } from "react";
 
 interface ChainOfThoughtContextValue {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  isStreaming?: boolean;
 }
 
 const ChainOfThoughtContext = createContext<ChainOfThoughtContextValue | null>(
@@ -37,6 +38,7 @@ export type ChainOfThoughtProps = ComponentProps<"div"> & {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  isStreaming?: boolean;
 };
 
 export const ChainOfThought = memo(
@@ -45,6 +47,7 @@ export const ChainOfThought = memo(
     open,
     defaultOpen = false,
     onOpenChange,
+    isStreaming,
     children,
     ...props
   }: ChainOfThoughtProps) => {
@@ -55,8 +58,8 @@ export const ChainOfThought = memo(
     });
 
     const chainOfThoughtContext = useMemo(
-      () => ({ isOpen, setIsOpen }),
-      [isOpen, setIsOpen]
+      () => ({ isOpen, setIsOpen, isStreaming }),
+      [isOpen, setIsOpen, isStreaming]
     );
 
     return (
@@ -75,7 +78,7 @@ export type ChainOfThoughtHeaderProps = ComponentProps<
 
 export const ChainOfThoughtHeader = memo(
   ({ className, children, ...props }: ChainOfThoughtHeaderProps) => {
-    const { isOpen, setIsOpen } = useChainOfThought();
+    const { isOpen, setIsOpen, isStreaming } = useChainOfThought();
 
     return (
       <Collapsible onOpenChange={setIsOpen} open={isOpen}>
@@ -86,13 +89,22 @@ export const ChainOfThoughtHeader = memo(
           )}
           {...props}
         >
-          <BrainIcon className="size-4" />
+          <BrainIcon className="size-4 shrink-0" />
           <span className="flex-1 text-left">
             {children ?? "Chain of Thought"}
           </span>
+          {isStreaming && (
+            <span className="flex items-center gap-1 text-xs text-primary">
+              <span className="relative flex size-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex size-2 rounded-full bg-primary" />
+              </span>
+              Running
+            </span>
+          )}
           <ChevronDownIcon
             className={cn(
-              "size-4 transition-transform",
+              "size-4 shrink-0 transition-transform",
               isOpen ? "rotate-180" : "rotate-0"
             )}
           />
@@ -135,11 +147,15 @@ export const ChainOfThoughtStep = memo(
       {...props}
     >
       <div className="relative mt-0.5">
-        <Icon className="size-4" />
+        {status === "active" ? (
+          <LoaderCircleIcon className="size-4 animate-spin text-primary" />
+        ) : (
+          <Icon className="size-4" />
+        )}
         <div className="absolute top-7 bottom-0 left-1/2 -mx-px w-px bg-border" />
       </div>
       <div className="flex-1 space-y-2 overflow-hidden">
-        <div>{label}</div>
+        <div className={cn(status === "active" && "font-medium text-foreground")}>{label}</div>
         {description && (
           <div className="text-muted-foreground text-xs">{description}</div>
         )}

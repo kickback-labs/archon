@@ -21,6 +21,7 @@ cp .env.example .env
 The following variables need to be filled in:
 
 - `AI_GATEWAY_API_KEY` — API key for [Vercel AI Gateway](https://vercel.com/ai-gateway)
+- `OPENAI_API_KEY` — API key for [OpenAI](https://openai.com)
 - `DATABASE_URL` — PostgreSQL connection string, e.g. `postgres://user:password@localhost:5432/archon`.
 - `BETTER_AUTH_SECRET` — A random secret used to sign auth tokens. Generate one with:
 ```bash

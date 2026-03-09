@@ -1,16 +1,8 @@
-import { gateway, InferAgentUIMessage, stepCountIs, ToolLoopAgent, wrapLanguageModel } from "ai";
-import { devToolsMiddleware } from "@ai-sdk/devtools";
+import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai";
+import { makeModel, agentProviderOptions } from "./model";
 import { readFileTool } from "@/lib/tools/read-file-tool";
 import fs from "fs";
 import path from "path";
-
-const patternModel =
-  process.env.NODE_ENV === "development"
-    ? wrapLanguageModel({
-        model: gateway("openai/gpt-4.1-nano"),
-        middleware: devToolsMiddleware(),
-      })
-    : gateway("openai/gpt-4.1-nano");
 
 const PATTERNS_CONTEXT = fs.readFileSync(
   path.join(process.cwd(), "data", "PATTERNS_CONTEXT.md"),
@@ -28,7 +20,7 @@ ${PATTERNS_CONTEXT}
 ## Your Process
 
 **Step 1 — Pattern Selection**
-Read the user's system description carefully. Using the pattern catalogue above, identify every pattern that is structurally implied by the requirements. Patterns are NOT mutually exclusive — a production system commonly combines multiple patterns.
+Read the user's system description carefully. Using the pattern catalogue above, identify every pattern that is structurally implied by the requirements. Patterns are NOT mutually exclusive — a production system commonly combines multiple patterns. Do not select more than 6 patterns, pick the most relevant ones.
 
 **Step 2 — Pattern Enrichment**
 For each selected pattern, call the \`read_file\` tool with its detail file path (e.g., \`data/patterns/serverless-event-driven.md\`). Where multiple patterns share a detail file (e.g., Saga variants both use \`saga.md\`), a single read covers both.
@@ -53,12 +45,13 @@ The \`implied_pillars\` list MUST be derived from the pattern detail files you r
 IMPORTANT: Your final message must be ONLY the JSON object — no markdown fences, no preamble, no explanation. Just the raw JSON.`;
 
 export const patternAgent = new ToolLoopAgent({
-  model: patternModel,
+  model: makeModel(),
+  providerOptions: agentProviderOptions,
   instructions: PATTERN_AGENT_INSTRUCTIONS,
   tools: {
     read_file: readFileTool,
   },
-  stopWhen: stepCountIs(12),
+  stopWhen: stepCountIs(8),
 });
 
 export type PatternAgentUIMessage = InferAgentUIMessage<typeof patternAgent>;
