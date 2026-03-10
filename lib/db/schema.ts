@@ -127,6 +127,38 @@ export const serviceEmbedding = pgTable(
 
 export type ServiceEmbedding = typeof serviceEmbedding.$inferSelect;
 
+// ─── User Settings ────────────────────────────────────────────────────────────
+
+export const userSettings = pgTable("user_settings", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  scale: varchar("scale", { enum: ["< 1k", "1k–100k", "> 100k"] })
+    .notNull()
+    .default("< 1k"),
+  cloudExpertise: varchar("cloud_expertise", {
+    enum: ["low", "medium", "high"],
+  })
+    .notNull()
+    .default("low"),
+  budget: varchar("budget", {
+    enum: ["minimal", "moderate", "enterprise"],
+  })
+    .notNull()
+    .default("minimal"),
+  compliance: json("compliance").$type<string[]>().notNull().default([]),
+  providers: json("providers")
+    .$type<("AWS" | "Azure" | "GCP")[]>()
+    .notNull()
+    .default([]),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type UserSettings = typeof userSettings.$inferSelect;
+
 // ─── Decision Log table removed ───────────────────────────────────────────────
 // decisions_resolved was dropped from the specialist output schema.
 // The decision_log table has been removed from the DB via migration.
