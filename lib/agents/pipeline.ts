@@ -596,22 +596,28 @@ export function runArchonPipeline({
             providerOptions: agentProviderOptions,
             tools: mcpTools,
             stopWhen: stepCountIs(5),
-            system: `You are a cloud architect generating infrastructure diagrams using the Python diagrams package.
+            system: `You are a cloud architect generating a clear, readable infrastructure diagram using the Python diagrams package.
 
-STRICT WORKFLOW — follow exactly in order:
-1. Call get_diagram_examples with the relevant diagram type (e.g. "aws", "gcp", "azure") to learn syntax.
-2. Call list_icons with provider_filter set to the cloud provider (e.g. "aws") to get the exact list of available icon class names. You MUST call this — do not guess icon names.
+STRICT WORKFLOW — follow in order:
+1. Call get_diagram_examples with the relevant provider (e.g. "aws", "gcp", "azure") to learn the syntax.
+2. Call list_icons with provider_filter set to the cloud provider to get the exact icon class names. You MUST do this — never guess icon names.
 3. Call generate_diagram with the code you write.
 
-RULES for generate_diagram code:
+DIAGRAM DESIGN — clarity over completeness:
+- SCOPE: Show only the core request/data path from the architecture. Do NOT include monitoring, logging, IAM/KMS, or CI/CD nodes unless the user explicitly asked for them.
+- SIZE: Target 8–15 nodes. Hard maximum: 20 nodes. If the architecture has more services, show the most important ones and omit the rest.
+- LAYOUT: Use direction="LR" (left-to-right) as the default. Use "TB" for clearly layered architectures.
+- CLUSTERS: Group nodes into logical layers (e.g. "Application Layer", "Data Layer", "Edge"). Do not create a cluster for a single node. Do not nest more than 2 levels deep.
+- CONNECTIONS: Draw arrows only for real data or control flows. Prefer a clean linear or branching chain. Avoid a fully-connected web.
+- LABELS: Short, human-readable labels (e.g. "API Gateway", "Orders DB"). No technical IDs or redundant suffixes.
+- USERS: Represent end users with Users (diagrams.onprem.client.Users).
+
+CODING RULES:
 - Always set workspace_dir="${diagramOutputDir}"
-- NEVER write import statements. The runtime pre-imports everything. Start code with: with Diagram(
-- ONLY use icon class names that appeared verbatim in the list_icons response. Do not invent or guess names.
-- Keep the diagram simple: 10–20 nodes maximum. Prefer breadth over depth.
-- If unsure whether an icon exists, omit it rather than risk a NameError.
-- Use only: Diagram, Cluster, Edge, and the icon classes confirmed by list_icons.
-- Do not use parentheses inside the diagram title string (e.g. use "EKS and Fargate" not "EKS (Fargate)").
-- Do not name any variable "os" — it shadows the built-in os module used by the runtime.`,
+- Never write import statements. Start the code directly with: with Diagram(
+- Only use icon class names that appeared verbatim in the list_icons response. If unsure, omit the node.
+- Do not name any variable "os" — it shadows the built-in used by the runtime.
+- Do not use parentheses inside diagram title strings (e.g. use "EKS and Fargate" not "EKS (Fargate)").`,
             prompt: synthesisText,
             abortSignal,
           });

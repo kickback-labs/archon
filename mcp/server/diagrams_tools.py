@@ -4,7 +4,6 @@
 # Modifications Copyright 2025 Andrii Moshurenko
 # - Restructured as infrastructure-diagram-mcp-server
 # - Added comprehensive diagram examples for GCP, Azure, Hybrid, and Multi-cloud
-# - Added draw.io export support
 # - Enhanced icon discovery and filtering
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,11 +59,12 @@ async def generate_diagram(
 
     Supported diagram types:
     - AWS architecture diagrams
-    - Sequence diagrams
-    - Flow diagrams
-    - Class diagrams
+    - GCP architecture diagrams
+    - Azure architecture diagrams
     - Kubernetes diagrams
     - On-premises diagrams
+    - Hybrid / Multi-cloud diagrams
+    - Sequence, Flow, and Class diagrams
     - Custom diagrams with custom nodes
 
     Args:
@@ -351,7 +351,6 @@ from diagrams.aws.enduser import *
                 # Check if show parameter is already set
                 has_show = "show=" in original_args
                 has_filename = "filename=" in original_args
-                has_outformat = "outformat=" in original_args
 
                 # Prepare new arguments
                 new_args = original_args
@@ -379,12 +378,6 @@ from diagrams.aws.enduser import *
                     if new_args and not new_args.endswith(","):
                         new_args += ", "
                     new_args += "show=False"
-
-                # Add outformat=["png", "dot"] to generate both PNG and DOT files
-                if not has_outformat:
-                    if new_args and not new_args.endswith(","):
-                        new_args += ", "
-                    new_args += 'outformat=["png", "dot"]'
 
                 # Splice the new args back in using the exact character positions
                 code = code[:start_idx] + new_args + code[end_idx:]
@@ -462,6 +455,13 @@ def get_diagram_examples(
     Returns:
         DiagramExampleResponse: Dictionary with example code for the requested diagram type(s)
     """
+    # Normalise: accept plain strings (e.g. "gcp") or DiagramType enum members
+    if not isinstance(diagram_type, DiagramType):
+        try:
+            diagram_type = DiagramType(str(diagram_type).lower())
+        except ValueError:
+            diagram_type = DiagramType.ALL
+
     examples = {}
 
     # Basic examples
@@ -472,7 +472,7 @@ def get_diagram_examples(
 
     if diagram_type in [DiagramType.SEQUENCE, DiagramType.ALL]:
         examples["sequence"] = """with Diagram("User Authentication Flow", show=False):
-    user = User("User")
+    user = Users("User")
     login = InputOutput("Login Form")
     auth = Decision("Authenticated?")
     success = Action("Access Granted")
@@ -571,7 +571,7 @@ def get_diagram_examples(
         examples[
             "aws_bedrock"
         ] = """with Diagram("S3 Image Processing with Bedrock", show=False, direction="LR"):
-    user = User("User")
+    user = Users("User")
 
     with Cluster("Amazon S3 Bucket"):
         input_folder = S3("Input Folder")

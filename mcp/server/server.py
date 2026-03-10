@@ -40,55 +40,31 @@ from server.models import DiagramType
 # Create the MCP server
 mcp = FastMCP(
     "infrastructure-diagram-mcp-server",
-    instructions="""Use this server to generate professional infrastructure diagrams for any cloud provider, on-premises, or hybrid environments using the Python diagrams package.
+    instructions="""Use this server to generate clean, readable infrastructure diagrams using the Python diagrams package.
 
-WORKFLOW:
-1. list_icons:
-   - Discover all available icons in the diagrams package
-   - Browse providers (AWS, GCP, Azure, K8s, on-prem, SaaS), services, and icons organized hierarchically
-   - Find the exact import paths for icons you want to use
-   - Supports filtering by provider and service for efficient discovery
+WORKFLOW — follow in order:
+1. get_diagram_examples — fetch an example for the target provider to learn the syntax.
+2. list_icons — call with provider_filter to get the exact icon class names available. Never guess.
+3. generate_diagram — write and submit the diagram code.
 
-2. get_diagram_examples:
-   - Request example code for the diagram type you need
-   - Available types: aws, gcp, azure, k8s, onprem, hybrid, multicloud, sequence, flow, class, custom, or all
-   - Study the examples to understand the diagram package's syntax and capabilities
-   - Use these examples as templates for your own diagrams
-   - Each example demonstrates different features and diagram structures
+DIAGRAM DESIGN PRINCIPLES:
+Good diagrams are immediately readable. Follow these rules strictly:
 
-3. generate_diagram:
-   - Write Python code using the diagrams package DSL based on the examples
-   - Submit your code to generate a PNG file
-   - Optionally specify a filename
-   - The diagram is generated with show=False to prevent automatic display
+- SCOPE: Show only the core data/request path. Omit supporting concerns (monitoring, logging, IAM, CI/CD) unless the user explicitly asks for them. These can be separate diagrams.
+- SIZE: Target 8–15 nodes. Hard limit of 20 nodes per diagram. More nodes = less clarity.
+- LAYOUT: Use direction="LR" (left-to-right) as the default. Use "TB" only for hierarchical/layered diagrams. Prefer a single linear or branching flow over a web of connections.
+- CLUSTERS: Group nodes that belong to the same logical layer or boundary (e.g. "Application Layer", "Data Layer"). Do not create clusters for just 1 or 2 nodes. Do not nest more than 2 cluster levels.
+- CONNECTIONS: Every arrow must represent a real data or control flow. Avoid connecting everything to everything. Prefer a clean left-to-right chain.
+- LABELS: Use short, human-readable node labels (e.g. "API Gateway", "Orders DB"). Avoid technical IDs or redundant suffixes.
+- USERS: Always represent end users with Users (diagrams.onprem.client.Users).
 
-   - IMPORTANT: Always provide the workspace_dir parameter to save diagrams in the user's current directory
+WHAT TO EXCLUDE BY DEFAULT (make separate diagrams only if asked):
+- CloudWatch, logging, monitoring nodes
+- IAM, KMS, security scanning nodes
+- CI/CD pipelines
+- Cross-region replication unless it is the core topic
 
-SUPPORTED INFRASTRUCTURE TYPES:
-- AWS: EC2, Lambda, S3, RDS, EKS, and 200+ other services
-- GCP: Cloud Functions, Cloud Run, BigQuery, GKE, Dataflow, and more
-- Azure: App Service, Functions, AKS, Cosmos DB, Synapse, and more
-- Kubernetes: Pods, Services, Deployments, StatefulSets, Ingress, and more
-- On-premises: Servers, databases, networking, storage, proxies, and more
-- Hybrid: Combinations of on-premises and cloud infrastructure
-- Multi-cloud: Architectures spanning multiple cloud providers
-- SaaS: GitHub, Slack, Datadog, and other third-party services
-- Generic: Platform-agnostic compute, storage, network, and database components
-- Sequence diagrams: Process and interaction flows
-- Flow diagrams: Decision trees and workflows
-- Class diagrams: Object relationships and inheritance
-- Custom diagrams: Using custom nodes and icons from URLs
-
-IMPORTANT:
-- Always start with get_diagram_examples to understand the syntax for your target platform
-- Use the list_icons tool to discover all available icons (filter by provider for efficiency)
-- The code must include a Diagram() definition
-- Diagrams are saved as PNG in a "generated-diagrams" subdirectory of the user's workspace by default
-- If an absolute path is provided as filename, it will be used directly
-- Diagram generation has a default timeout of 90 seconds
-- For complex diagrams, consider breaking them into smaller components
-- Use Clusters to organize and group related infrastructure components
-- Use Edge() for custom connection styling (color, style, labels)""",
+SUPPORTED PROVIDERS: AWS, GCP, Azure, Kubernetes, on-prem, hybrid, multi-cloud, SaaS.""",
 )
 
 
@@ -114,54 +90,27 @@ async def mcp_generate_diagram(
 ):
     """Generate a diagram from Python code using the diagrams package.
 
-    This tool accepts Python code as a string that uses the diagrams package DSL
-    and generates both PNG and editable .drawio files. The code is executed with
-    show=False to prevent automatic display.
+    This tool accepts Python code using the diagrams package DSL and generates a PNG diagram.
 
-    USAGE INSTRUCTIONS:
-    Never import. Start writing code immediately with `with Diagram(` and use the icons you found with list_icons.
-    1. First use get_diagram_examples to understand the syntax and capabilities
-    2. Then use list_icons to discover all available icons. These are the only icons you can work with.
-    3. You MUST use icon names exactly as they are in the list_icons response, case-sensitive.
-    4. Write your diagram code following python diagrams examples. Do not import any additional icons or packages, the runtime already imports everything needed.
-    5. Submit your code to this tool to generate the diagram
-    6. The tool returns paths to both the PNG image and editable .drawio file
-    7. For complex diagrams, consider using Clusters to organize components
-    8. Diagrams should start with a user or end device on the left, with data flowing to the right.
+    RULES:
+    - Never write import statements. The runtime pre-imports everything. Start directly with: with Diagram(
+    - Only use icon class names confirmed by list_icons. Do not guess or invent names.
+    - Always use Users (diagrams.onprem.client) to represent end users.
+    - Do not name any variable "os" — it shadows the built-in used by the runtime.
+    - Do not use parentheses inside diagram title strings.
 
-    CODE REQUIREMENTS:
-    - Must include a Diagram() definition with appropriate parameters
-    - Can use any of the supported diagram components (AWS, K8s, etc.)
-    - Can include custom styling with Edge attributes (color, style)
-    - Can use Cluster to group related components
-    - Can use custom icons with the Custom class
+    DIAGRAM DESIGN — keep it clean and readable:
+    - TARGET 8–15 nodes. Hard limit: 20 nodes. Strip anything that isn't core to the data path.
+    - Use direction="LR" by default (left-to-right flow). Use "TB" for layered/hierarchical diagrams.
+    - Group related nodes into Clusters (e.g. "Application Layer", "Data Layer"). Max 2 nesting levels.
+    - Draw only meaningful data/control flow arrows. Avoid a fully-connected web.
+    - Omit monitoring, logging, IAM, and CI/CD nodes unless the user explicitly asks for them.
 
     COMMON PATTERNS:
-    - Basic: provider.service("label")
-    - Connections: service1 >> service2 >> service3
-    - Grouping: with Cluster("name"): [components]
-    - Styling: service1 >> Edge(color="red", style="dashed") >> service2
-
-    IMPORTANT FOR CLINE: Always send the current workspace directory when calling this tool!
-    The workspace_dir parameter should be set to the directory where the user is currently working
-    so that diagrams are saved to a location accessible to the user.
-
-    Supported diagram types:
-    - AWS architecture diagrams
-    - Sequence diagrams
-    - Flow diagrams
-    - Class diagrams
-    - Kubernetes diagrams
-    - On-premises diagrams
-    - Custom diagrams with custom nodes
-
-    Returns:
-        List containing:
-        - TextContent with success message and path to the PNG file
-        - ImageContent with the generated diagram (PNG) for immediate display
-
-    OUTPUT FILES:
-        - PNG diagram: For immediate viewing and sharing
+    - Linear flow:   user >> gateway >> service >> database
+    - Branching:     service >> [worker1, worker2, worker3]
+    - Grouping:      with Cluster("Data Layer"): db = RDS("orders")
+    - Styled edge:   service >> Edge(label="async", style="dashed") >> queue
     """
     # Special handling for test cases
     if code == 'with Diagram("Test", show=False):\n    ELB("lb") >> EC2("web")':
@@ -310,7 +259,19 @@ def main():
     port = int(os.environ.get("MCP_PORT", "8000"))
     host = os.environ.get("MCP_HOST", "0.0.0.0")
     try:
-        mcp.run(transport="streamable-http", host=host, port=port, log_level="error")
+        mcp.run(
+            transport="streamable-http",
+            host=host,
+            port=port,
+            log_level="error",
+            # Increase keep-alive timeout to 30 s (default is 5 s).
+            # The Node.js fetch client reuses HTTP connections; if the LLM takes
+            # ~4-5 s to respond between MCP calls, the connection can hit the
+            # 5 s uvicorn deadline and be closed server-side while Node.js still
+            # considers it live. The next tool call then fails with "fetch failed"
+            # (ECONNRESET). 30 s gives ample headroom beyond typical LLM latency.
+            uvicorn_config={"timeout_keep_alive": 30},
+        )
     except KeyboardInterrupt:
         print("\nShutting down the MCP server gracefully...")
         sys.exit(0)
