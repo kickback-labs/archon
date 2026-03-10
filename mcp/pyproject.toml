@@ -1,0 +1,31 @@
+[project]
+name = "infrastructure-diagram-mcp-server"
+version = "0.1.0"
+description = "MCP server for generating infrastructure diagrams using the Python diagrams package"
+readme = "README.md"
+authors = [
+    { name = "NontasBak", email = "nontasbak@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]>=1.9.0",
+    "fastmcp>=2.0.0",
+    "diagrams>=0.24.4",
+    "pydantic>=2.0.0",
+    "bandit>=1.8.0",
+    "graphviz>=0.20.3",
+]
+
+[project.scripts]
+diagram-mcp = "server.server:main"
+
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+
+[tool.uv.build-backend]
+module-name = "server"
+module-root = ""
