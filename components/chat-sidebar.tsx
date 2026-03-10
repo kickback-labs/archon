@@ -10,6 +10,7 @@ import {
   MoonIcon,
   MonitorIcon,
   SunIcon,
+  SettingsIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -142,6 +143,17 @@ export function ChatSidebar({ chats: initialChats }: ChatSidebarProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <Link
+          href="/settings"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-accent text-left select-none",
+            pathname === "/settings" && "bg-accent text-accent-foreground"
+          )}
+        >
+          <SettingsIcon className="size-3.5 shrink-0" />
+          Settings
+        </Link>
 
         {session?.user ? (
           <DropdownMenu>
