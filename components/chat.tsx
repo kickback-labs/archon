@@ -43,6 +43,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { ArchonAgentUIMessage } from "@/lib/agents/archon-agent";
 import type { ArchonDataTypes } from "@/lib/agents/pipeline";
+import type { DiagramState } from "@/components/diagram-panel";
 import type { PatternAgentUIMessage } from "@/lib/agents/pattern-agent";
 import type { ValidatorAgentUIMessage } from "@/lib/agents/validator-agent";
 import type { WaveOutput } from "@/lib/agents/wave-tools";
@@ -66,7 +67,7 @@ import {
   TruckIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useState, Fragment, useRef, useMemo } from "react";
+import { useState, Fragment, useRef, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 // ─── Pillar metadata ──────────────────────────────────────────────────────────
@@ -95,6 +96,7 @@ type PatternsData = ArchonDataTypes["archon-patterns"];
 type Wave1Data = ArchonDataTypes["archon-wave1"];
 type Wave2Data = ArchonDataTypes["archon-wave2"];
 type ValidatorData = ArchonDataTypes["archon-validator"];
+type DiagramData = ArchonDataTypes["archon-diagram"];
 
 /** Find the last data part of a given archon type in a message's parts array. */
 function findLastDataPart<T>(
@@ -519,9 +521,10 @@ function ThinkingIndicator() {
 interface ChatProps {
   id: string;
   initialMessages?: UIMessage[];
+  onDiagramChange?: (diagram: DiagramState | null) => void;
 }
 
-export function Chat({ id, initialMessages }: ChatProps) {
+export function Chat({ id, initialMessages, onDiagramChange }: ChatProps) {
   const [text, setText] = useState("");
   const router = useRouter();
   const refreshedRef = useRef(false);
@@ -549,6 +552,37 @@ export function Chat({ id, initialMessages }: ChatProps) {
 
   const isStreaming = status === "streaming";
   const currentPhase = useCurrentPhase(messages);
+
+  // Notify parent whenever the diagram state changes.
+  useEffect(() => {
+    if (!onDiagramChange) return;
+    // Find the last data-archon-diagram part across all assistant messages.
+    let diagramData: DiagramData | undefined;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role !== "assistant") continue;
+      const part = msg.parts.findLast((p) => p.type === "data-archon-diagram");
+      if (part && "data" in part) {
+        diagramData = part.data as DiagramData;
+        break;
+      }
+    }
+
+    if (!diagramData) {
+      onDiagramChange(null);
+      return;
+    }
+
+    if (diagramData.state === "generating") {
+      onDiagramChange({ state: "generating" });
+    } else if (diagramData.state === "complete" && diagramData.imagePath) {
+      onDiagramChange({ state: "complete", imagePath: diagramData.imagePath });
+    } else if (diagramData.state === "error") {
+      onDiagramChange({ state: "error", error: diagramData.error ?? "Unknown error" });
+    } else {
+      onDiagramChange(null);
+    }
+  }, [messages, onDiagramChange]);
 
   // Determine if we're waiting for the very first content (submitted but no assistant parts yet)
   const lastMessage = messages[messages.length - 1];

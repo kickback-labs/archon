@@ -15,10 +15,12 @@
   },
   "dependencies": {
     "@ai-sdk/devtools": "^0.0.15",
+    "@ai-sdk/mcp": "^1.0.25",
     "@ai-sdk/openai": "^3.0.41",
     "@ai-sdk/react": "^3.0.118",
     "@base-ui/react": "^1.2.0",
     "@better-auth/drizzle-adapter": "^1.5.4",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@neondatabase/serverless": "^1.0.2",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@rive-app/react-webgl2": "^4.27.0",

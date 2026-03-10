@@ -1,11 +1,14 @@
 import {
   readUIMessageStream,
   streamText,
+  generateText,
   createUIMessageStream,
   generateId,
+  stepCountIs,
   type UIMessage,
 } from "ai";
 import { makeModel, agentProviderOptions } from "./model";
+import { createDiagramMCPClient } from "./mcp-client";
 import {
   requirementsAgent,
   type RequirementsAgentUIMessage,
@@ -49,6 +52,13 @@ export type ArchonDataTypes = {
   "archon-validator": {
     state: "streaming" | "complete";
     output?: ValidatorAgentUIMessage;
+  };
+  /** Emitted when diagram generation completes (Phase 5) */
+  "archon-diagram": {
+    state: "generating" | "complete" | "error";
+    /** URL path served by /api/diagrams/... */
+    imagePath?: string;
+    error?: string;
   };
 };
 
@@ -551,11 +561,154 @@ export function runArchonPipeline({
         abortSignal,
       });
 
-      writer.merge(
-        synthesisResult.toUIMessageStream() as ReadableStream<
-          Parameters<typeof writer.write>[0]
-        >,
-      );
+      // Stream synthesis text manually so we can run Phase 5 after it completes.
+      const synthesisTextId = "synthesis-text";
+      writer.write({ type: "text-start", id: synthesisTextId });
+      let synthesisText = "";
+      for await (const chunk of synthesisResult.textStream) {
+        synthesisText += chunk;
+        writer.write({ type: "text-delta", delta: chunk, id: synthesisTextId });
+      }
+      writer.write({ type: "text-end", id: synthesisTextId });
+
+      // ── Phase 5: Diagram Generation ────────────────────────────────────
+      writer.write({
+        type: "data-archon-diagram",
+        id: "phase-diagram",
+        data: { state: "generating" },
+      });
+
+      try {
+        const diagramOutputDir =
+          process.env.DIAGRAM_OUTPUT_DIR ?? "/tmp/archon-diagrams";
+
+        // Ensure the output directory exists before passing it to the MCP server.
+        // The Python diagrams_tools.py checks os.path.isdir(workspace_dir) and
+        // falls back to /tmp/generated-diagrams if the directory doesn't exist.
+        const { mkdir } = await import("fs/promises");
+        await mkdir(diagramOutputDir, { recursive: true }).catch(() => {});
+
+        const mcpClient = await createDiagramMCPClient();
+        try {
+          const mcpTools = await mcpClient.tools();
+          const diagramGenResult = await generateText({
+            model: makeModel(),
+            providerOptions: agentProviderOptions,
+            tools: mcpTools,
+            stopWhen: stepCountIs(5),
+            system: `You are a cloud architect generating infrastructure diagrams using the Python diagrams package.
+
+STRICT WORKFLOW — follow exactly in order:
+1. Call get_diagram_examples with the relevant diagram type (e.g. "aws", "gcp", "azure") to learn syntax.
+2. Call list_icons with provider_filter set to the cloud provider (e.g. "aws") to get the exact list of available icon class names. You MUST call this — do not guess icon names.
+3. Call generate_diagram with the code you write.
+
+RULES for generate_diagram code:
+- Always set workspace_dir="${diagramOutputDir}"
+- NEVER write import statements. The runtime pre-imports everything. Start code with: with Diagram(
+- ONLY use icon class names that appeared verbatim in the list_icons response. Do not invent or guess names.
+- Keep the diagram simple: 10–20 nodes maximum. Prefer breadth over depth.
+- If unsure whether an icon exists, omit it rather than risk a NameError.
+- Use only: Diagram, Cluster, Edge, and the icon classes confirmed by list_icons.
+- Do not use parentheses inside the diagram title string (e.g. use "EKS and Fargate" not "EKS (Fargate)").
+- Do not name any variable "os" — it shadows the built-in os module used by the runtime.`,
+            prompt: synthesisText,
+            abortSignal,
+          });
+
+          // Extract text from an MCP tool output.
+          // The raw execute() return from @ai-sdk/mcp is the MCP CallToolResult:
+          //   { content: [{ type: "text", text: "..." }, ...], isError: bool }
+          // (mcpToModelOutput converts this for the LLM, but toolResult.output
+          //  is the raw value before that transformation.)
+          function extractTextFromOutput(output: unknown): string {
+            if (!output || typeof output !== "object") return String(output ?? "");
+            const o = output as Record<string, unknown>;
+
+            // Raw MCP CallToolResult: { content: [...], isError?: bool }
+            if (Array.isArray(o.content)) {
+              return (o.content as unknown[])
+                .filter(
+                  (item): item is { type: string; text: string } =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    (item as Record<string, unknown>).type === "text" &&
+                    typeof (item as Record<string, unknown>).text === "string",
+                )
+                .map((item) => item.text)
+                .join("\n");
+            }
+
+            // @ai-sdk/mcp transformed shape: { type: "content", value: [...] }
+            if (o.type === "content" && Array.isArray(o.value)) {
+              return (o.value as unknown[])
+                .filter(
+                  (item): item is { type: string; text: string } =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    (item as Record<string, unknown>).type === "text" &&
+                    typeof (item as Record<string, unknown>).text === "string",
+                )
+                .map((item) => item.text)
+                .join("\n");
+            }
+
+            // { type: "json", value: <raw> }
+            if (o.type === "json") return JSON.stringify(o.value);
+
+            return JSON.stringify(o);
+          }
+
+          // Find the diagram path from the generate_diagram tool result
+          let imagePath: string | undefined;
+          let lastGenerateError: string | undefined;
+          for (const step of diagramGenResult.steps) {
+            for (const toolResult of step.toolResults ?? []) {
+              if (
+                !("toolName" in toolResult) ||
+                toolResult.toolName !== "generate_diagram"
+              )
+                continue;
+              const text = extractTextFromOutput(toolResult.output);
+              const match = text.match(/PNG diagram:\s*(.+\.png)/i);
+              if (match) {
+                imagePath = match[1].trim();
+              } else {
+                // Surface the actual error text, stripping the "Error: " prefix if present
+                lastGenerateError = text.replace(/^Error:\s*/i, "").trim() || "generate_diagram returned no output";
+              }
+            }
+          }
+
+          if (imagePath) {
+            writer.write({
+              type: "data-archon-diagram",
+              id: "phase-diagram",
+              data: { state: "complete", imagePath },
+            });
+          } else {
+            writer.write({
+              type: "data-archon-diagram",
+              id: "phase-diagram",
+              data: {
+                state: "error",
+                error: lastGenerateError
+                  ? `Diagram generation failed: ${lastGenerateError}`
+                  : "generate_diagram was not called or returned no output",
+              },
+            });
+          }
+        } finally {
+          await mcpClient.close();
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        writer.write({
+          type: "data-archon-diagram",
+          id: "phase-diagram",
+          data: { state: "error", error: msg },
+        });
+      }
     },
   });
 }

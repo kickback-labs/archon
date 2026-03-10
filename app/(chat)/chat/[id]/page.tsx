@@ -1,8 +1,8 @@
 import { auth } from "@/lib/auth";
 import { getChatById, getMessagesByChatId } from "@/lib/db/queries";
-import { Chat } from "@/components/chat";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { ChatPageClient } from "./page-client";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -24,9 +24,5 @@ export default async function ChatPage({ params }: PageProps) {
 
   const initialMessages = await getMessagesByChatId(id);
 
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <Chat id={id} initialMessages={initialMessages} />
-    </div>
-  );
+  return <ChatPageClient id={id} initialMessages={initialMessages} />;
 }

@@ -393,70 +393,78 @@ This report is passed in full to the Synthesis Agent, which incorporates the mos
 
 ---
 
-### Phase 4 — Synthesis Agent
+### Phase 4 — Synthesis + Diagram
 
-**Purpose:** Produce the final architectural output. This agent does not do retrieval or service selection — it synthesises and communicates the work already done.
+Phase 4 runs sequentially in two steps: the Synthesis Agent streams the written response first, then the Diagram Agent generates the infrastructure diagram via MCP.
+
+---
+
+#### Step 4a — Synthesis Agent
+
+**Purpose:** Produce the final written architectural output. This agent does not do retrieval or service selection — it synthesises and communicates the work already done.
 
 **Input:**
 - Requirements Schema
 - Pattern Agent output
-- All pillar recommendations — Wave 1 + Wave 2 (post-critic)
-- All resolved decisions
+- All pillar recommendations — Wave 1 + Wave 2
+- Well-Architected validation report (from Phase 3)
 
-**Output — four parts:**
+**Output:** A single streamed markdown document with the following structure:
 
-#### 1. Architecture Narrative
+##### 1. Architecture Narrative
 
-Prose explanation structured as:
+Prose explanation covering:
 - What this architecture is and why it fits the stated requirements
 - Key trade-offs made (what was ruled out and why)
-- Risks and mitigations
+- Risks and mitigations (incorporating the most important findings from the Well-Architected report)
 - Where this architecture breaks down (scaling ceiling, cost inflection points, operational complexity thresholds)
 
-#### 2. Service List
+##### 2. Service List
 
-Structured, per-pillar:
+Per-pillar breakdown of every recommended service with its role and justification.
 
-```ts
-{
-  pillar: CategorySlug,
-  services: {
-    provider: string,
-    service_name: string,
-    role: string,
-    justification: string
-  }[]
-}[]
-```
-
-#### 3. Architecture Diagram Payload
-
-A node/edge structure for rendering in the `Canvas` component:
-
-```ts
-{
-  nodes: {
-    id: string,
-    label: string,           // service name
-    category: CategorySlug,
-    provider: string,
-    role: string
-  }[],
-  edges: {
-    from: string,
-    to: string,
-    label?: string           // e.g. "async", "HTTPS", "replicates to"
-  }[]
-}
-```
-
-#### 4. Next Steps
+##### 3. Next Steps
 
 Prioritised implementation order with:
 - What to build first and why
 - Critical early decisions that are hard to reverse later
 - Estimated monthly cost bracket (rough range, not a quote)
 - Suggested follow-up questions the user should ask
+
+The synthesis text streams to the UI in real time via `text-start` / `text-delta` / `text-end` stream chunks. The Well-Architected report is consumed by the Synthesis Agent as context — it is not shown raw in the UI.
+
+---
+
+#### Step 4b — Diagram Agent (MCP)
+
+**Purpose:** Generate a PNG infrastructure diagram using the Python `diagrams` package, via an MCP server running as a separate process.
+
+**Trigger:** Runs after the synthesis text stream completes.
+
+**Transport:** HTTP MCP (`@ai-sdk/mcp` with `type: "http"`), connecting to the MCP server at `MCP_SERVER_URL` (default: `http://localhost:8000/mcp`).
+
+**Tool workflow (enforced by system prompt):**
+
+1. `get_diagram_examples` — fetches example code for the relevant cloud provider (e.g. `"aws"`, `"gcp"`, `"azure"`) to learn the diagrams DSL syntax.
+2. `list_icons` — discovers available icon class names for the provider, filtered by provider. Only names returned here may be used in code.
+3. `generate_diagram` — submits Python code using the diagrams DSL. Always called with `workspace_dir` set to `DIAGRAM_OUTPUT_DIR` (default: `/tmp/archon-diagrams`).
+
+**Code constraints enforced by the system prompt:**
+- No import statements — the MCP server pre-imports all providers into the exec namespace.
+- Start code directly with `with Diagram(`.
+- Only use icon class names confirmed by `list_icons` (case-sensitive).
+- 10–20 nodes maximum.
+- No parentheses in the diagram title string (avoids a code-rewriting regex issue in the server).
+- Do not name any variable `os` (would shadow the built-in module in the exec namespace).
+
+**Output:** The MCP server saves the PNG to `DIAGRAM_OUTPUT_DIR/generated-diagrams/<filename>.png` and returns the absolute path in its text response. The Diagram Agent parses this path with the pattern `/PNG diagram:\s*(.+\.png)/i`.
+
+**UI integration:**
+- While generating: emits `data-archon-diagram` with `state: "generating"` → the diagram panel slides in from the right showing a spinner, and the chat area slides left to ~55% width (Framer Motion layout animation).
+- On success: emits `data-archon-diagram` with `state: "complete"` and `imagePath` → the panel displays the PNG served by `/api/diagrams/[...path]`.
+- On failure: emits `data-archon-diagram` with `state: "error"` → the panel shows the error message.
+
+**PNG serving:** `GET /api/diagrams/[...path]` reconstructs the absolute filesystem path from URL segments and serves the file directly. The path guard allows any path under `DIAGRAM_OUTPUT_DIR` or the system temp directory (`os.tmpdir()`), since the MCP server may fall back to `/tmp/generated-diagrams` if the configured directory did not exist at the time of the call. The configured directory is created with `mkdir -p` both at pipeline start (before the MCP client connects) and on each `/api/diagrams` request.
 
 ---
 
