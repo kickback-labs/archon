@@ -110,6 +110,9 @@ importers:
       react-jsx-parser:
         specifier: ^2.4.1
         version: 2.4.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      react-medium-image-zoom:
+        specifier: ^5.4.1
+        version: 5.4.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       shiki:
         specifier: ^4.0.1
         version: 4.0.1
@@ -4808,6 +4811,12 @@ packages:
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
+
+  react-medium-image-zoom@5.4.1:
+    resolution: {integrity: sha512-DD2iZYaCfAwiQGR8AN62r/cDJYoXhezlYJc5HY4TzBUGuGge43CptG0f7m0PEIM72aN6GfpjohvY1yYdtCJB7g==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   react-remove-scroll-bar@2.3.8:
     resolution: {integrity: sha512-9r+yi9+mgU33AKcj6IbT9oRCO78WriSj6t/cF8DWBZJ9aOGPOTEDvdUDz1FwKim7QXWwmHqtdHnRJfhAxEG46Q==}
@@ -10554,6 +10563,11 @@ snapshots:
     optionalDependencies:
       '@types/react': 18.3.28
       '@types/react-dom': 18.3.7(@types/react@18.3.28)
+
+  react-medium-image-zoom@5.4.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
+    dependencies:
+      react: 19.2.3
+      react-dom: 19.2.3(react@19.2.3)
 
   react-remove-scroll-bar@2.3.8(@types/react@19.2.14)(react@19.2.3):
     dependencies:

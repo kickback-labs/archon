@@ -9,41 +9,48 @@ interface ChatLayoutProps {
 }
 
 /**
- * Wraps the chat content with an animated split-panel layout.
+ * Wraps the chat content with a split-panel layout.
  *
  * - When `diagram` is null: chat takes full width.
- * - When `diagram` is set (generating, complete, or error): chat slides left to
- *   ~55% width and a diagram panel slides in from the right.
+ * - When `diagram` is set: chat takes ~55% width and the right column slides in.
+ *   The right column is split vertically — diagram panel on top (~55% height),
+ *   leaving the bottom free for future content.
  *
- * Uses Framer Motion (available as `motion/react`) for smooth transitions.
+ * The chat column itself is NOT animated so switching between chats never
+ * triggers an unwanted slide. Only the right column fades/slides in and out.
  */
 export function ChatLayout({ diagram, children }: ChatLayoutProps) {
   const hasDiagram = diagram !== null;
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      {/* Chat area */}
-      <motion.div
-        layout
-        className="flex h-full min-w-0 flex-col"
-        animate={{ width: hasDiagram ? "55%" : "100%" }}
-        transition={{ type: "spring", stiffness: 300, damping: 35 }}
+      {/* Chat area — width controlled by CSS only, no motion animation */}
+      <div
+        className="flex h-full min-w-0 flex-col transition-none"
+        style={{ width: hasDiagram ? "55%" : "100%" }}
       >
         {children}
-      </motion.div>
+      </div>
 
-      {/* Diagram panel — slides in from the right */}
+      {/* Right column — slides in from the right when a diagram is present */}
       <AnimatePresence>
         {hasDiagram && (
           <motion.div
-            key="diagram-panel"
-            className="h-full flex-shrink-0 overflow-hidden border-l border-border bg-muted/30"
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: "45%", opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 35 }}
+            key="right-column"
+            className="flex h-full flex-shrink-0 flex-col border-l border-border"
+            style={{ width: "45%" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
           >
-            <DiagramPanel diagram={diagram} />
+            {/* Top: infrastructure diagram — takes upper portion of the right column */}
+            <div className="flex-[0_0_38%] overflow-hidden border-b border-border bg-muted/30">
+              <DiagramPanel diagram={diagram} />
+            </div>
+
+            {/* Bottom: reserved for future content */}
+            <div className="flex-1 bg-background" />
           </motion.div>
         )}
       </AnimatePresence>
