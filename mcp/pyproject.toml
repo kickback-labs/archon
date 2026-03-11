@@ -12,7 +12,6 @@ dependencies = [
     "fastmcp>=2.0.0",
     "diagrams>=0.24.4",
     "pydantic>=2.0.0",
-    "bandit>=1.8.0",
     "graphviz>=0.20.3",
 ]
 

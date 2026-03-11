@@ -1,23 +1,3 @@
-# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
-# Modifications Copyright 2025 Andrii Moshurenko
-# - Restructured as infrastructure-diagram-mcp-server
-# - Added comprehensive diagram examples for GCP, Azure, Hybrid, and Multi-cloud
-# - Enhanced icon discovery and filtering
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Diagram generation and example functions for the diagrams-mcp-server."""
 
 import importlib
@@ -38,7 +18,6 @@ from server.models import (
     DiagramIconsResponse,
     DiagramType,
 )
-from server.scanner import scan_python_code
 
 logger = logging.getLogger(__name__)
 
@@ -76,14 +55,6 @@ async def generate_diagram(
     Returns:
         DiagramGenerateResponse: Response with the path to the generated diagram and status
     """
-    # Scan the code for security issues
-    scan_result = await scan_python_code(code)
-    if scan_result.has_errors:
-        return DiagramGenerateResponse(
-            status="error",
-            message=f"Security issues found in the code: {scan_result.error_message}",
-        )
-
     if filename is None:
         filename = f"diagram_{uuid.uuid4().hex[:8]}"
 
