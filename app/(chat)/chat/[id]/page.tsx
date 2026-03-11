@@ -1,5 +1,9 @@
 import { auth } from "@/lib/auth";
-import { getChatById, getMessagesByChatId } from "@/lib/db/queries";
+import {
+  getChatById,
+  getMessagesByChatId,
+  getArchitectureServicesByChatId,
+} from "@/lib/db/queries";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { ChatPageClient } from "./page-client";
@@ -22,7 +26,16 @@ export default async function ChatPage({ params }: PageProps) {
     notFound();
   }
 
-  const initialMessages = await getMessagesByChatId(id);
+  const [initialMessages, initialServices] = await Promise.all([
+    getMessagesByChatId(id),
+    getArchitectureServicesByChatId(id),
+  ]);
 
-  return <ChatPageClient id={id} initialMessages={initialMessages} />;
+  return (
+    <ChatPageClient
+      id={id}
+      initialMessages={initialMessages}
+      initialServices={initialServices}
+    />
+  );
 }

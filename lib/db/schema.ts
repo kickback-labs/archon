@@ -159,6 +159,27 @@ export const userSettings = pgTable("user_settings", {
 
 export type UserSettings = typeof userSettings.$inferSelect;
 
+// ─── Architecture Services ────────────────────────────────────────────────────
+
+export const architectureService = pgTable("architecture_service", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  chatId: uuid("chat_id")
+    .notNull()
+    .references(() => chat.id, { onDelete: "cascade" }),
+  tier: varchar("tier", { enum: ["core", "secondary"] }).notNull(),
+  provider: varchar("provider", { enum: ["AWS", "Azure", "GCP"] }).notNull(),
+  serviceName: text("service_name").notNull(),
+  pillarLabel: text("pillar_label").notNull(),
+  /** Short "why it's core" tag — only populated for core services (≤ 50 chars) */
+  coreTag: text("core_tag"),
+  /** App-tailored description. Core ≤ 300 chars, secondary ≤ 150 chars. */
+  description: text("description").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type ArchitectureService = typeof architectureService.$inferSelect;
+
 // ─── Decision Log table removed ───────────────────────────────────────────────
 // decisions_resolved was dropped from the specialist output schema.
 // The decision_log table has been removed from the DB via migration.

@@ -44,6 +44,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import type { ArchonAgentUIMessage } from "@/lib/agents/archon-agent";
 import type { ArchonDataTypes } from "@/lib/agents/pipeline";
 import type { DiagramState } from "@/components/diagram-panel";
+import type { ServicesPanelState } from "@/components/services-panel";
 import type { PatternAgentUIMessage } from "@/lib/agents/pattern-agent";
 import type { ValidatorAgentUIMessage } from "@/lib/agents/validator-agent";
 import type { WaveOutput } from "@/lib/agents/wave-tools";
@@ -97,6 +98,7 @@ type Wave1Data = ArchonDataTypes["archon-wave1"];
 type Wave2Data = ArchonDataTypes["archon-wave2"];
 type ValidatorData = ArchonDataTypes["archon-validator"];
 type DiagramData = ArchonDataTypes["archon-diagram"];
+type ServicesData = ArchonDataTypes["archon-services"];
 
 /** Find the last data part of a given archon type in a message's parts array. */
 function findLastDataPart<T>(
@@ -517,9 +519,10 @@ interface ChatProps {
   id: string;
   initialMessages?: UIMessage[];
   onDiagramChange?: (diagram: DiagramState | null) => void;
+  onServicesChange?: (services: ServicesPanelState | null) => void;
 }
 
-export function Chat({ id, initialMessages, onDiagramChange }: ChatProps) {
+export function Chat({ id, initialMessages, onDiagramChange, onServicesChange }: ChatProps) {
   const [text, setText] = useState("");
   const router = useRouter();
   const refreshedRef = useRef(false);
@@ -578,6 +581,45 @@ export function Chat({ id, initialMessages, onDiagramChange }: ChatProps) {
       onDiagramChange(null);
     }
   }, [messages, onDiagramChange]);
+
+  // Notify parent whenever the services state changes.
+  useEffect(() => {
+    if (!onServicesChange) return;
+    // Find the last data-archon-services part across all assistant messages.
+    let servicesData: ServicesData | undefined;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role !== "assistant") continue;
+      const part = msg.parts.findLast((p) => p.type === "data-archon-services");
+      if (part && "data" in part) {
+        servicesData = part.data as ServicesData;
+        break;
+      }
+    }
+
+    if (!servicesData) {
+      onServicesChange(null);
+      return;
+    }
+
+    if (servicesData.state === "generating") {
+      onServicesChange({ state: "generating" });
+    } else if (
+      servicesData.state === "complete" &&
+      servicesData.coreServices !== undefined &&
+      servicesData.secondaryServices !== undefined
+    ) {
+      onServicesChange({
+        state: "complete",
+        coreServices: servicesData.coreServices,
+        secondaryServices: servicesData.secondaryServices,
+      });
+    } else if (servicesData.state === "error") {
+      onServicesChange({ state: "error", error: servicesData.error ?? "Unknown error" });
+    } else {
+      onServicesChange(null);
+    }
+  }, [messages, onServicesChange]);
 
   // Determine if we're waiting for the very first content (submitted but no assistant parts yet)
   const lastMessage = messages[messages.length - 1];

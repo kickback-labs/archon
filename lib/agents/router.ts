@@ -1,4 +1,4 @@
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import { makeModel, agentProviderOptions } from "./model";
 import type { UIMessage } from "ai";
@@ -33,10 +33,10 @@ export async function classifyIntent(
     ? "There is prior architecture output in this conversation."
     : "This is the first message in the conversation.";
 
-  const { object } = await generateObject({
+  const { output } = await generateText({
     model: makeModel(),
     providerOptions: agentProviderOptions,
-    schema: routerSchema,
+    output: Output.object({ schema: routerSchema }),
     system: `You are a request classifier for an AI cloud architect system.
 
 Classify the user's message as exactly one of:
@@ -50,5 +50,5 @@ Respond with the JSON object only.`,
     abortSignal,
   });
 
-  return object.intent;
+  return output.intent;
 }

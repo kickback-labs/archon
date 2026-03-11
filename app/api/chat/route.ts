@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import {
   type ArchonAgentUIMessage,
+  type ServiceCard,
   classifyIntent,
   runArchonPipeline,
   runFollowup,
@@ -11,6 +12,7 @@ import {
   getUserSettings,
   updateChatTitle,
   upsertMessages,
+  upsertArchitectureServices,
 } from "@/lib/db/queries";
 import { createUIMessageStreamResponse, generateId, type UIMessage } from "ai";
 import { headers } from "next/headers";
@@ -72,6 +74,9 @@ export async function POST(req: Request) {
           generateMessageId: generateId,
           userSettings,
           onFinish,
+          onPersistServices: async (services: ServiceCard[]) => {
+            await upsertArchitectureServices({ chatId: id, services });
+          },
         })
       : runFollowup({
           uiMessages,

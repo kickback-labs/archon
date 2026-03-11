@@ -1,7 +1,8 @@
 import type { UIMessage } from "ai";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "./index";
-import { chat, message, userSettings } from "./schema";
+import { chat, message, userSettings, architectureService } from "./schema";
+import type { ArchitectureService } from "./schema";
 
 // ─── Chats ────────────────────────────────────────────────────────────────────
 
@@ -145,4 +146,56 @@ export async function upsertUserSettings({
     })
     .returning();
   return result;
+}
+
+// ─── Architecture Services ─────────────────────────────────────────────────────
+
+export async function getArchitectureServicesByChatId(
+  chatId: string,
+): Promise<ArchitectureService[]> {
+  return db
+    .select()
+    .from(architectureService)
+    .where(eq(architectureService.chatId, chatId))
+    .orderBy(architectureService.sortOrder);
+}
+
+/**
+ * Replace all architecture services for a chat with the provided list.
+ * Called from the pipeline after the services extraction LLM call completes.
+ */
+export async function upsertArchitectureServices({
+  chatId,
+  services,
+}: {
+  chatId: string;
+  services: Array<{
+    tier: "core" | "secondary";
+    provider: "AWS" | "Azure" | "GCP";
+    serviceName: string;
+    pillarLabel: string;
+    coreTag?: string | null;
+    description: string;
+    sortOrder: number;
+  }>;
+}) {
+  if (services.length === 0) return;
+
+  // Delete existing rows for this chat and reinsert fresh.
+  await db
+    .delete(architectureService)
+    .where(eq(architectureService.chatId, chatId));
+
+  await db.insert(architectureService).values(
+    services.map((s) => ({
+      chatId,
+      tier: s.tier,
+      provider: s.provider,
+      serviceName: s.serviceName,
+      pillarLabel: s.pillarLabel,
+      coreTag: s.coreTag ?? null,
+      description: s.description,
+      sortOrder: s.sortOrder,
+    })),
+  );
 }

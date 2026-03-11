@@ -22,3 +22,4 @@ export type ArchonAgentUIMessage = UIMessage;
 
 export { classifyIntent } from "./router";
 export { runArchonPipeline, runFollowup } from "./pipeline";
+export type { ServiceCard } from "./pipeline";
