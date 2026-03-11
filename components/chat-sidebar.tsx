@@ -10,11 +10,12 @@ import {
   MoonIcon,
   MonitorIcon,
   SunIcon,
+  SettingsIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useSession, signOut } from "@/lib/auth-client";
+import { signOut } from "@/lib/auth-client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,13 +28,13 @@ import { useOptimistic, useTransition } from "react";
 
 interface ChatSidebarProps {
   chats: Chat[];
+  user: { id: string; name: string; email: string; image?: string | null } | null;
 }
 
-export function ChatSidebar({ chats: initialChats }: ChatSidebarProps) {
+export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { setTheme } = useTheme();
-  const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
 
   const [chats, removeChat] = useOptimistic(
@@ -143,10 +144,21 @@ export function ChatSidebar({ chats: initialChats }: ChatSidebarProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {session?.user ? (
+        <Link
+          href="/settings"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-accent text-left select-none",
+            pathname === "/settings" && "bg-accent text-accent-foreground"
+          )}
+        >
+          <SettingsIcon className="size-3.5 shrink-0" />
+          Settings
+        </Link>
+
+        {user ? (
           <DropdownMenu>
             <DropdownMenuTrigger className="flex w-full items-center rounded-md px-2 py-1.5 text-xs hover:bg-accent text-left cursor-default select-none outline-none">
-              <span className="truncate">{session.user.name}</span>
+              <span className="truncate">{user.name}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top">
               <DropdownMenuItem

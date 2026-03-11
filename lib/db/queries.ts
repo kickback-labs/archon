@@ -1,7 +1,7 @@
 import type { UIMessage } from "ai";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "./index";
-import { chat, message } from "./schema";
+import { chat, message, userSettings } from "./schema";
 
 // ─── Chats ────────────────────────────────────────────────────────────────────
 
@@ -95,4 +95,54 @@ export async function upsertMessages({
         attachments: sql`excluded.attachments`,
       },
     });
+}
+
+// ─── User Settings ────────────────────────────────────────────────────────────
+
+export async function getUserSettings(userId: string) {
+  const [found] = await db
+    .select()
+    .from(userSettings)
+    .where(eq(userSettings.userId, userId));
+  return found ?? null;
+}
+
+export async function upsertUserSettings({
+  userId,
+  scale,
+  cloudExpertise,
+  budget,
+  compliance,
+  providers,
+}: {
+  userId: string;
+  scale: string;
+  cloudExpertise: string;
+  budget: string;
+  compliance: string[];
+  providers: string[];
+}) {
+  const [result] = await db
+    .insert(userSettings)
+    .values({
+      userId,
+      scale: scale as "< 1k" | "1k–100k" | "> 100k",
+      cloudExpertise: cloudExpertise as "low" | "medium" | "high",
+      budget: budget as "minimal" | "moderate" | "enterprise",
+      compliance,
+      providers: providers as ("AWS" | "Azure" | "GCP")[],
+    })
+    .onConflictDoUpdate({
+      target: userSettings.userId,
+      set: {
+        scale: sql`excluded.scale`,
+        cloudExpertise: sql`excluded.cloud_expertise`,
+        budget: sql`excluded.budget`,
+        compliance: sql`excluded.compliance`,
+        providers: sql`excluded.providers`,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+  return result;
 }

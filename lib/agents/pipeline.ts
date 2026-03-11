@@ -1,11 +1,14 @@
 import {
   readUIMessageStream,
   streamText,
+  generateText,
   createUIMessageStream,
   generateId,
+  stepCountIs,
   type UIMessage,
 } from "ai";
 import { makeModel, agentProviderOptions } from "./model";
+import { createDiagramMCPClient } from "./mcp-client";
 import {
   requirementsAgent,
   type RequirementsAgentUIMessage,
@@ -22,6 +25,7 @@ import {
 } from "./validator-agent";
 import type { CategorySlug } from "@/lib/tools/retrieve-tool";
 import type { WaveOutput } from "./wave-tools";
+import type { UserSettings } from "@/lib/db/schema";
 
 // ─── Data part schemas ────────────────────────────────────────────────────────
 
@@ -50,6 +54,13 @@ export type ArchonDataTypes = {
     state: "streaming" | "complete";
     output?: ValidatorAgentUIMessage;
   };
+  /** Emitted when diagram generation completes (Phase 5) */
+  "archon-diagram": {
+    state: "generating" | "complete" | "error";
+    /** URL path served by /api/diagrams/... */
+    imagePath?: string;
+    error?: string;
+  };
 };
 
 export type ArchonUIMessage = UIMessage<unknown, ArchonDataTypes>;
@@ -75,7 +86,7 @@ async function streamAgentWithMilestones<T extends UIMessage>(
   let lastCompletedToolCount = 0;
   for await (const message of readUIMessageStream({ stream })) {
     lastMessage = message as T;
-    // Count how many tool calls have a completed output in this snapshot.
+    // Fire a milestone each time a tool call's output becomes available.
     const completedCount = lastMessage.parts.filter(
       (p) =>
         (p.type.startsWith("tool-") && "state" in p && p.state === "output-available"),
@@ -279,6 +290,32 @@ function extractUserPrompt(uiMessages: UIMessage[]): string {
     .join("\n");
 }
 
+/**
+ * Format user settings into a context block that can be prepended to prompts.
+ * Returns an empty string if settings are null/undefined.
+ */
+function formatSettingsContext(settings: UserSettings | null | undefined): string {
+  if (!settings) return "";
+
+  const lines: string[] = [
+    "## User Profile (from saved settings — treat as explicitly stated preferences)",
+    `- Scale: ${settings.scale}`,
+    `- Cloud Expertise: ${settings.cloudExpertise}`,
+    `- Budget: ${settings.budget}`,
+  ];
+
+  if (settings.providers && settings.providers.length > 0) {
+    lines.push(`- Preferred Providers: ${settings.providers.join(", ")}`);
+  }
+
+  if (settings.compliance && settings.compliance.length > 0) {
+    lines.push(`- Compliance Requirements: ${settings.compliance.join(", ")}`);
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
 // ─── Main pipeline ────────────────────────────────────────────────────────────
 
 /**
@@ -299,12 +336,14 @@ export function runArchonPipeline({
   originalMessages,
   abortSignal,
   generateMessageId = generateId,
+  userSettings,
   onFinish,
 }: {
   uiMessages: UIMessage[];
   originalMessages?: UIMessage[];
   abortSignal?: AbortSignal;
   generateMessageId?: () => string;
+  userSettings?: UserSettings | null;
   onFinish?: (params: { messages: UIMessage[] }) => Promise<void> | void;
 }) {
   return createUIMessageStream<ArchonUIMessage>({
@@ -315,6 +354,14 @@ export function runArchonPipeline({
     >[0]["onFinish"],
     execute: async ({ writer }) => {
       const userPrompt = extractUserPrompt(uiMessages);
+      const settingsContext = formatSettingsContext(userSettings);
+
+      // Prepend user settings to the prompt so the requirements agent
+      // treats them as explicitly stated preferences instead of falling
+      // back to conservative defaults.
+      const enrichedPrompt = settingsContext
+        ? `${settingsContext}\n## User Request\n${userPrompt}`
+        : userPrompt;
 
       // ── Phase 0: Requirements Agent ────────────────────────────────────
       // Use a stable id so every subsequent write updates the same part in-place
@@ -327,7 +374,7 @@ export function runArchonPipeline({
       });
 
       const reqResult = await requirementsAgent.stream({
-        prompt: userPrompt,
+        prompt: enrichedPrompt,
         abortSignal,
       });
 
@@ -551,11 +598,162 @@ export function runArchonPipeline({
         abortSignal,
       });
 
-      writer.merge(
-        synthesisResult.toUIMessageStream() as ReadableStream<
-          Parameters<typeof writer.write>[0]
-        >,
-      );
+      // Stream synthesis text manually so we can run Phase 5 after it completes.
+      const synthesisTextId = "synthesis-text";
+      writer.write({ type: "text-start", id: synthesisTextId });
+      let synthesisText = "";
+      for await (const chunk of synthesisResult.textStream) {
+        synthesisText += chunk;
+        writer.write({ type: "text-delta", delta: chunk, id: synthesisTextId });
+      }
+      writer.write({ type: "text-end", id: synthesisTextId });
+
+      // ── Phase 5: Diagram Generation ────────────────────────────────────
+      writer.write({
+        type: "data-archon-diagram",
+        id: "phase-diagram",
+        data: { state: "generating" },
+      });
+
+      try {
+        const diagramOutputDir =
+          process.env.DIAGRAM_OUTPUT_DIR ?? "/tmp/archon-diagrams";
+
+        // Ensure the output directory exists before passing it to the MCP server.
+        // The Python diagrams_tools.py checks os.path.isdir(workspace_dir) and
+        // falls back to /tmp/generated-diagrams if the directory doesn't exist.
+        const { mkdir } = await import("fs/promises");
+        await mkdir(diagramOutputDir, { recursive: true }).catch(() => {});
+
+        const mcpClient = await createDiagramMCPClient();
+        try {
+          const mcpTools = await mcpClient.tools();
+          const diagramGenResult = await generateText({
+            model: makeModel(),
+            providerOptions: agentProviderOptions,
+            tools: mcpTools,
+            stopWhen: stepCountIs(5),
+            system: `You are a cloud architect generating a clear, readable infrastructure diagram using the Python diagrams package.
+
+STRICT WORKFLOW — follow in order:
+1. Call get_diagram_examples with the relevant provider (e.g. "aws", "gcp", "azure") to learn the syntax.
+2. Call list_icons with provider_filter set to the cloud provider to get the exact icon class names. You MUST do this — never guess icon names.
+3. Call generate_diagram with the code you write.
+
+DIAGRAM DESIGN — clarity over completeness:
+- SCOPE: Show only the most important services in the core request/data path. Do NOT include monitoring, logging, IAM/KMS, or CI/CD nodes unless the user explicitly asked for them.
+- SIZE: Target 8–12 nodes. Hard maximum: 15 nodes. When in doubt, cut — fewer nodes makes a better diagram.
+- LAYOUT: Always use direction="LR" (left-to-right). Do not use "TB".
+- CLUSTERS: Organize nodes into named architectural layers — use standard layer names where they apply: "Edge", "Network Layer", "Application Layer" / "Compute Layer", "Data Layer", "Messaging Layer", "Storage Layer". Only create a cluster when 2+ nodes belong to the same layer. Do not nest more than 2 levels deep. Use invisible edges (Edge(style="invis")) between clusters/nodes to enforce left-to-right column ordering.
+- CONNECTIONS: Connect layers to layers, not individual nodes to everything. The canonical flow is: Users → Edge cluster → Network cluster → Application/Compute cluster → Data/Storage cluster. Draw one representative arrow per layer-to-layer handoff (e.g. the load balancer node represents the whole Edge→Network handoff). Never fan out edges from a single node to nodes in multiple unrelated layers. No edge labels — never use Edge(label=...). Use Edge(style="dashed") only for async/background flows between layers. If two nodes are in the same cluster (same layer), do NOT draw an edge between them unless there is an explicit intra-layer flow (e.g. primary→replica replication).
+- NODE LABELS: Every node label must have two lines: line 1 is the service name, line 2 is a short description of its role. Keep each line under ~25 characters. Use \\n to separate them. Example: "Cloud Run\\nHandle API requests".
+- USERS: Represent end users with Users (diagrams.onprem.client.Users).
+
+CODING RULES:
+- Always set workspace_dir="${diagramOutputDir}"
+- Never write import statements. Start the code directly with: with Diagram(
+- Always set graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"} on the Diagram for clean arrow routing.
+- Only use icon class names that appeared verbatim in the list_icons response. If unsure, omit the node.
+- PROVIDER CONSISTENCY: For single-provider architectures (e.g. AWS-only), every icon MUST come from that provider's namespace (diagrams.aws.*). Do NOT accidentally include icons from other providers — if a service has no icon in the target provider, omit the node. For explicitly multi-cloud architectures, you may mix provider namespaces intentionally; in that case call list_icons once per provider used and group each provider's nodes inside a clearly labelled cluster (e.g. "AWS Region", "Azure Services"). The only always-permitted cross-provider node is Users (diagrams.onprem.client.Users).
+- Do not name any variable "os" — it shadows the built-in used by the runtime.
+- Do not use parentheses inside diagram title strings (e.g. use "EKS and Fargate" not "EKS (Fargate)").`,
+            prompt: synthesisText,
+            abortSignal,
+          });
+
+          // Extract text from an MCP tool output.
+          // The raw execute() return from @ai-sdk/mcp is the MCP CallToolResult:
+          //   { content: [{ type: "text", text: "..." }, ...], isError: bool }
+          // (mcpToModelOutput converts this for the LLM, but toolResult.output
+          //  is the raw value before that transformation.)
+          function extractTextFromOutput(output: unknown): string {
+            if (!output || typeof output !== "object") return String(output ?? "");
+            const o = output as Record<string, unknown>;
+
+            // Raw MCP CallToolResult: { content: [...], isError?: bool }
+            if (Array.isArray(o.content)) {
+              return (o.content as unknown[])
+                .filter(
+                  (item): item is { type: string; text: string } =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    (item as Record<string, unknown>).type === "text" &&
+                    typeof (item as Record<string, unknown>).text === "string",
+                )
+                .map((item) => item.text)
+                .join("\n");
+            }
+
+            // @ai-sdk/mcp transformed shape: { type: "content", value: [...] }
+            if (o.type === "content" && Array.isArray(o.value)) {
+              return (o.value as unknown[])
+                .filter(
+                  (item): item is { type: string; text: string } =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    (item as Record<string, unknown>).type === "text" &&
+                    typeof (item as Record<string, unknown>).text === "string",
+                )
+                .map((item) => item.text)
+                .join("\n");
+            }
+
+            // { type: "json", value: <raw> }
+            if (o.type === "json") return JSON.stringify(o.value);
+
+            return JSON.stringify(o);
+          }
+
+          // Find the diagram path from the generate_diagram tool result
+          let imagePath: string | undefined;
+          let lastGenerateError: string | undefined;
+          for (const step of diagramGenResult.steps) {
+            for (const toolResult of step.toolResults ?? []) {
+              if (
+                !("toolName" in toolResult) ||
+                toolResult.toolName !== "generate_diagram"
+              )
+                continue;
+              const text = extractTextFromOutput(toolResult.output);
+              const match = text.match(/PNG diagram:\s*(.+\.png)/i);
+              if (match) {
+                imagePath = match[1].trim();
+              } else {
+                // Surface the actual error text, stripping the "Error: " prefix if present
+                lastGenerateError = text.replace(/^Error:\s*/i, "").trim() || "generate_diagram returned no output";
+              }
+            }
+          }
+
+          if (imagePath) {
+            writer.write({
+              type: "data-archon-diagram",
+              id: "phase-diagram",
+              data: { state: "complete", imagePath },
+            });
+          } else {
+            writer.write({
+              type: "data-archon-diagram",
+              id: "phase-diagram",
+              data: {
+                state: "error",
+                error: lastGenerateError
+                  ? `Diagram generation failed: ${lastGenerateError}`
+                  : "generate_diagram was not called or returned no output",
+              },
+            });
+          }
+        } finally {
+          await mcpClient.close();
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        writer.write({
+          type: "data-archon-diagram",
+          id: "phase-diagram",
+          data: { state: "error", error: msg },
+        });
+      }
     },
   });
 }
@@ -568,12 +766,14 @@ export function runFollowup({
   originalMessages,
   abortSignal,
   generateMessageId = generateId,
+  userSettings,
   onFinish,
 }: {
   uiMessages: UIMessage[];
   originalMessages?: UIMessage[];
   abortSignal?: AbortSignal;
   generateMessageId?: () => string;
+  userSettings?: UserSettings | null;
   onFinish?: (params: { messages: UIMessage[] }) => Promise<void> | void;
 }) {
   return createUIMessageStream<ArchonUIMessage>({
@@ -583,6 +783,11 @@ export function runFollowup({
       typeof createUIMessageStream<ArchonUIMessage>
     >[0]["onFinish"],
     execute: ({ writer }) => {
+      const settingsContext = formatSettingsContext(userSettings);
+      const followupSystem = settingsContext
+        ? `${FOLLOWUP_SYSTEM}\n\n${settingsContext}`
+        : FOLLOWUP_SYSTEM;
+
       const historyMessages = uiMessages
         .map((m) => ({
           role: m.role as "user" | "assistant",
@@ -596,7 +801,7 @@ export function runFollowup({
       const result = streamText({
         model: makeModel(),
         providerOptions: agentProviderOptions,
-        system: FOLLOWUP_SYSTEM,
+        system: followupSystem,
         messages: historyMessages,
         abortSignal,
       });

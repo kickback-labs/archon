@@ -13,7 +13,7 @@ export default async function ChatLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <ChatSidebar chats={chats} />
+      <ChatSidebar chats={chats} user={session?.user ?? null} />
       <main className="flex flex-1 flex-col overflow-hidden">
         {children}
       </main>

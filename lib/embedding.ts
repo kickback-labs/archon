@@ -1,10 +1,11 @@
 import { embed, embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
 import { db } from "@/lib/db";
 import { serviceEmbedding } from "@/lib/db/schema";
 import { cosineDistance, desc, gt, sql, and, eq, inArray, notInArray } from "drizzle-orm";
 
 // text-embedding-3-small: 1536 dims
-const embeddingModel = "openai/text-embedding-3-small";
+const embeddingModel = openai.embedding("text-embedding-3-small");
 
 // ─── Generate embeddings ──────────────────────────────────────────────────────
 
