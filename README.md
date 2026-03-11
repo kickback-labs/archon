@@ -2,38 +2,65 @@
 
 A cloud architect AI agent chatbot built with Next.js, TypeScript, and the Vercel AI SDK.
 
+## Prerequisites
+
+**App**
+- [Node.js](https://nodejs.org)
+- [pnpm](https://pnpm.io)
+- PostgreSQL database
+
+**Diagram generation**
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
+- Graphviz:
+
+```bash
+sudo apt-get install graphviz graphviz-dev
+```
+
 ## Running locally
 
-**Prerequisites:** Node.js, pnpm, and a PostgreSQL database.
-
-1. Install dependencies:
+### 1. Install Next.js dependencies
 
 ```bash
 pnpm install
 ```
 
-2. Copy `.env.example` to `.env` and fill in the values:
+### 2. Configure environment variables
 
 ```bash
 cp .env.example .env
 ```
 
-The following variables need to be filled in:
+Fill in the following values:
 
 - `OPENAI_API_KEY` — API key for [OpenAI](https://openai.com)
-- `DATABASE_URL` — PostgreSQL connection string, e.g. `postgres://user:password@localhost:5432/archon`.
-- `BETTER_AUTH_SECRET` — A random secret used to sign auth tokens. Generate one with:
+- `DATABASE_URL` — PostgreSQL connection string, e.g. `postgres://user:password@localhost:5432/archon`
+- `BETTER_AUTH_SECRET` — Random secret used to sign auth tokens. Generate one with:
+
 ```bash
 openssl rand -base64 32
 ```
 
-3. Generate and run database migrations:
+### 3. Run database migrations
 
 ```bash
 pnpm db:migrate
 ```
 
-4. Start the development server:
+### 4. Start the MCP diagram server
+
+The diagram generation feature requires the MCP server running separately. In a new terminal:
+
+```bash
+cd mcp
+uv sync
+uv run diagram-mcp
+```
+
+The server starts on `http://localhost:8000` by default. The Next.js app connects to it via the `MCP_SERVER_URL` environment variable.
+
+### 5. Start the Next.js development server
 
 ```bash
 pnpm dev
