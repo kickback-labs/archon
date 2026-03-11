@@ -31,23 +31,58 @@ interface ChatSidebarProps {
   user: { id: string; name: string; email: string; image?: string | null } | null;
 }
 
+const OPTIMISTIC_NEW_CHAT_ID = "__new__";
+
 export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { setTheme } = useTheme();
   const [isPending, startTransition] = useTransition();
 
-  const [chats, removeChat] = useOptimistic(
+  type OptimisticAction =
+    | { type: "delete"; id: string }
+    | { type: "add"; chat: Chat };
+
+  const [chats, dispatchOptimistic] = useOptimistic(
     initialChats,
-    (state: Chat[], deletedId: string) => state.filter((c) => c.id !== deletedId)
+    (state: Chat[], action: OptimisticAction) => {
+      if (action.type === "delete") {
+        return state.filter((c) => c.id !== action.id);
+      }
+      // Prepend the new chat, avoiding duplicates if the server re-render
+      // already included it.
+      if (state.some((c) => c.id === action.chat.id)) return state;
+      return [action.chat, ...state];
+    }
   );
+
+  const handleNewChat = () => {
+    startTransition(async () => {
+      const now = new Date();
+      dispatchOptimistic({
+        type: "add",
+        chat: {
+          id: OPTIMISTIC_NEW_CHAT_ID,
+          userId: user?.id ?? "",
+          title: "New Chat",
+          createdAt: now,
+          updatedAt: now,
+          visibility: "private",
+        },
+      });
+      const { id } = await createNewChat();
+      router.push(`/chat/${id}`);
+    });
+  };
 
   const handleDelete = (id: string) => {
     startTransition(async () => {
-      removeChat(id);
+      dispatchOptimistic({ type: "delete", id });
       await deleteChatAction(id);
       if (pathname === `/chat/${id}`) {
         router.push("/");
+      } else {
+        router.refresh();
       }
     });
   };
@@ -67,20 +102,19 @@ export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
 
       {/* New chat button */}
       <div className="px-3 py-2">
-        <form action={createNewChat}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
-            disabled={isPending}
-          >
-            <MessageSquarePlusIcon className="size-4" />
-            New Chat
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={handleNewChat}
+          className="flex w-full items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
+          disabled={isPending}
+        >
+          <MessageSquarePlusIcon className="size-4" />
+          New Chat
+        </button>
       </div>
 
       {/* Chat history */}
-      <ScrollArea className="flex-1 px-2">
+      <ScrollArea className="min-h-0 flex-1 px-2">
         <div className="py-2 space-y-0.5">
           {chats.length === 0 ? (
             <p className="px-2 py-4 text-center text-xs text-muted-foreground">
@@ -89,12 +123,14 @@ export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
           ) : (
             chats.map((chat) => {
               const isActive = pathname === `/chat/${chat.id}`;
+              const isOptimistic = chat.id === OPTIMISTIC_NEW_CHAT_ID;
               return (
                 <div
                   key={chat.id}
                   className={cn(
                     "group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:bg-accent",
-                    isActive && "bg-accent text-accent-foreground"
+                    isActive && "bg-accent text-accent-foreground",
+                    isOptimistic && "opacity-60"
                   )}
                 >
                   <Link
@@ -104,13 +140,15 @@ export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
                   >
                     {chat.title}
                   </Link>
-                  <button
-                    onClick={() => handleDelete(chat.id)}
-                    className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                    aria-label="Delete chat"
-                  >
-                    <TrashIcon className="size-3.5" />
-                  </button>
+                  {!isOptimistic && (
+                    <button
+                      onClick={() => handleDelete(chat.id)}
+                      className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                      aria-label="Delete chat"
+                    >
+                      <TrashIcon className="size-3.5" />
+                    </button>
+                  )}
                 </div>
               );
             })

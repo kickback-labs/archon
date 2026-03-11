@@ -7,6 +7,7 @@ import {
   getChatsByUser,
 } from "@/lib/db/queries";
 import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 async function requireUser() {
@@ -18,7 +19,8 @@ async function requireUser() {
 export async function createNewChat() {
   const user = await requireUser();
   const chat = await createChat({ userId: user.id });
-  redirect(`/chat/${chat.id}`);
+  revalidatePath("/", "layout");
+  return { id: chat.id };
 }
 
 export async function getUserChats() {
@@ -31,4 +33,5 @@ export async function deleteChatAction(id: string) {
   // Verify ownership via getChatsByUser isn't practical; trust the user is deleting their own.
   // A more robust app would join and check userId.
   await deleteChat(id);
+  revalidatePath("/", "layout");
 }
