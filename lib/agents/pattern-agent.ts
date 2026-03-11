@@ -1,6 +1,6 @@
 import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai";
 import { makeModel, agentProviderOptions } from "./model";
-import { readFileTool } from "@/lib/tools/read-file-tool";
+import { readFilesTool } from "@/lib/tools/read-file-tool";
 import fs from "fs";
 import path from "path";
 
@@ -15,12 +15,12 @@ const PATTERN_AGENT_INSTRUCTIONS = `You are the Pattern Agent for Archon, an AI 
 
 These rules are NON-NEGOTIABLE. Violating any of them is a pipeline failure.
 
-1. **You MUST call \`read_file\` for every pattern you select.** Do NOT skip this step. Do NOT produce output before reading pattern files. If you select 3 patterns, you call \`read_file\` at least once (combining shared files) and up to 3 times. There are NO exceptions. Proceeding to output without reading files is a critical error.
+1. **You MUST call \`read_files\` exactly once with ALL selected pattern paths in a single array.** Do NOT call it multiple times. Do NOT produce output before reading pattern files. There are NO exceptions. Proceeding to output without calling \`read_files\` is a critical error.
 2. **\`implied_pillars\` MUST be derived from the pattern detail files you read** — specifically from the "Implied Pillars" section in each file. Do NOT guess implied pillars from keywords in the user's message. Do NOT invent pillars that are not listed in the files you read.
 3. **\`implied_pillars\` must only contain values from this fixed set:** \`compute\`, \`storage\`, \`database\`, \`networking\`, \`security_identity\`, \`integration_messaging\`, \`analytics\`, \`ai_ml\`, \`devops\`, \`migration_hybrid\`, \`other\`. Any value outside this set is invalid.
-4. **Do NOT output the final JSON until you have finished all \`read_file\` calls.** Your output step is always last.
+4. **Do NOT output the final JSON until you have received the result from \`read_files\`.** Your output step is always last.
 5. **Your final response MUST be ONLY the raw JSON object** — no markdown fences, no preamble, no explanation.
-6. You can only read UP TO 6 files. No more.
+6. You can select UP TO 6 patterns. No more.
 
 ---
 
@@ -38,11 +38,11 @@ Read the system description. Using the catalogue above, identify every pattern t
 
 **Step 2 — Pattern Enrichment (MANDATORY — do NOT skip)**
 
-For EVERY pattern selected in Step 1, call \`read_file\` with its detail file path from the catalogue (e.g. \`data/patterns/serverless-event-driven.md\`). Where multiple patterns share a detail file (e.g. both Saga variants use \`saga.md\`), one call covers both — but you still MUST make the call. You may NOT proceed to Step 3 without completing all required \`read_file\` calls.
+Call \`read_files\` ONCE with the array of ALL selected pattern detail file paths from the catalogue (e.g. \`["data/patterns/serverless-event-driven.md", "data/patterns/saga.md"]\`). Where multiple patterns share a detail file (e.g. both Saga variants use \`saga.md\`), include that path only once. You MUST make this call before proceeding to Step 3.
 
-**Step 3 — Output (only after all read_file calls are complete)**
+**Step 3 — Output (only after read_files result is received)**
 
-Produce the final JSON. The \`implied_pillars\` list MUST be the union of all "Implied Pillars" sections from the files you read in Step 2. Do NOT add pillars not present in those sections.
+Produce the final JSON. The \`implied_pillars\` list MUST be the union of all "Implied Pillars" sections from the files returned in Step 2. Do NOT add pillars not present in those sections.
 
 Your final response must be this JSON object with both fields populated:
 
@@ -61,9 +61,9 @@ export const patternAgent = new ToolLoopAgent({
   providerOptions: agentProviderOptions,
   instructions: PATTERN_AGENT_INSTRUCTIONS,
   tools: {
-    read_file: readFileTool,
+    read_files: readFilesTool,
   },
-  stopWhen: stepCountIs(8),
+  stopWhen: stepCountIs(3),
 });
 
 export type PatternAgentUIMessage = InferAgentUIMessage<typeof patternAgent>;

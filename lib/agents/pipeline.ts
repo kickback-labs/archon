@@ -85,7 +85,7 @@ async function streamAgentWithMilestones<T extends UIMessage>(
   let lastCompletedToolCount = 0;
   for await (const message of readUIMessageStream({ stream })) {
     lastMessage = message as T;
-    // Count how many tool calls have a completed output in this snapshot.
+    // Fire a milestone each time a tool call's output becomes available.
     const completedCount = lastMessage.parts.filter(
       (p) =>
         (p.type.startsWith("tool-") && "state" in p && p.state === "output-available"),
@@ -604,18 +604,20 @@ STRICT WORKFLOW — follow in order:
 3. Call generate_diagram with the code you write.
 
 DIAGRAM DESIGN — clarity over completeness:
-- SCOPE: Show only the core request/data path from the architecture. Do NOT include monitoring, logging, IAM/KMS, or CI/CD nodes unless the user explicitly asked for them.
-- SIZE: Target 8–15 nodes. Hard maximum: 20 nodes. If the architecture has more services, show the most important ones and omit the rest.
-- LAYOUT: Use direction="LR" (left-to-right) as the default. Use "TB" for clearly layered architectures.
-- CLUSTERS: Group nodes into logical layers (e.g. "Application Layer", "Data Layer", "Edge"). Do not create a cluster for a single node. Do not nest more than 2 levels deep.
-- CONNECTIONS: Draw arrows only for real data or control flows. Prefer a clean linear or branching chain. Avoid a fully-connected web.
-- LABELS: Short, human-readable labels (e.g. "API Gateway", "Orders DB"). No technical IDs or redundant suffixes.
+- SCOPE: Show only the most important services in the core request/data path. Do NOT include monitoring, logging, IAM/KMS, or CI/CD nodes unless the user explicitly asked for them.
+- SIZE: Target 8–12 nodes. Hard maximum: 15 nodes. When in doubt, cut — fewer nodes makes a better diagram.
+- LAYOUT: Always use direction="LR" (left-to-right). Do not use "TB".
+- CLUSTERS: Organize nodes into named architectural layers — use standard layer names where they apply: "Edge", "Network Layer", "Application Layer" / "Compute Layer", "Data Layer", "Messaging Layer", "Storage Layer". Only create a cluster when 2+ nodes belong to the same layer. Do not nest more than 2 levels deep. Use invisible edges (Edge(style="invis")) between clusters/nodes to enforce left-to-right column ordering.
+- CONNECTIONS: Connect layers to layers, not individual nodes to everything. The canonical flow is: Users → Edge cluster → Network cluster → Application/Compute cluster → Data/Storage cluster. Draw one representative arrow per layer-to-layer handoff (e.g. the load balancer node represents the whole Edge→Network handoff). Never fan out edges from a single node to nodes in multiple unrelated layers. No edge labels — never use Edge(label=...). Use Edge(style="dashed") only for async/background flows between layers. If two nodes are in the same cluster (same layer), do NOT draw an edge between them unless there is an explicit intra-layer flow (e.g. primary→replica replication).
+- NODE LABELS: Every node label must have two lines: line 1 is the service name, line 2 is a short description of its role. Keep each line under ~25 characters. Use \\n to separate them. Example: "Cloud Run\\nHandle API requests".
 - USERS: Represent end users with Users (diagrams.onprem.client.Users).
 
 CODING RULES:
 - Always set workspace_dir="${diagramOutputDir}"
 - Never write import statements. Start the code directly with: with Diagram(
+- Always set graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"} on the Diagram for clean arrow routing.
 - Only use icon class names that appeared verbatim in the list_icons response. If unsure, omit the node.
+- PROVIDER CONSISTENCY: For single-provider architectures (e.g. AWS-only), every icon MUST come from that provider's namespace (diagrams.aws.*). Do NOT accidentally include icons from other providers — if a service has no icon in the target provider, omit the node. For explicitly multi-cloud architectures, you may mix provider namespaces intentionally; in that case call list_icons once per provider used and group each provider's nodes inside a clearly labelled cluster (e.g. "AWS Region", "Azure Services"). The only always-permitted cross-provider node is Users (diagrams.onprem.client.Users).
 - Do not name any variable "os" — it shadows the built-in used by the runtime.
 - Do not use parentheses inside diagram title strings (e.g. use "EKS and Fargate" not "EKS (Fargate)").`,
             prompt: synthesisText,

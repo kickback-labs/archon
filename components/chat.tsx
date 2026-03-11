@@ -177,39 +177,33 @@ function PatternAgentProgress({
 }) {
   const parts = nestedMessage.parts ?? [];
 
-  const readFileParts = parts.filter(
-    (p) => p.type === "tool-read_file",
-  ) as Extract<
-    PatternAgentUIMessage["parts"][number],
-    { type: "tool-read_file" }
-  >[];
+  const readFilesPart = parts.find(
+    (p) => p.type === "tool-read_files",
+  ) as
+    | Extract<PatternAgentUIMessage["parts"][number], { type: "tool-read_files" }>
+    | undefined;
 
-  const completedReads = readFileParts.filter(
-    (p) => p.state === "output-available",
-  );
+  const paths = (readFilesPart?.input as { paths?: string[] })?.paths ?? [];
+
+  function patternNameFromPath(rawPath: string): string {
+    return rawPath
+      .replace("data/patterns/", "")
+      .replace(".md", "")
+      .split("-")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
 
   return (
     <ChainOfThoughtContent>
-      {completedReads.map((part, i) => {
-        const rawPath = (part.input as { path?: string })?.path ?? null;
-        const patternName = rawPath
-          ? rawPath
-              .replace("data/patterns/", "")
-              .replace(".md", "")
-              .split("-")
-              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-              .join(" ")
-          : null;
-
-        return (
-          <ChainOfThoughtStep
-            key={`read-${i}`}
-            icon={FileTextIcon}
-            label={patternName ?? "Pattern file"}
-            status="complete"
-          />
-        );
-      })}
+      {paths.map((rawPath, i) => (
+        <ChainOfThoughtStep
+          key={`read-${i}`}
+          icon={FileTextIcon}
+          label={patternNameFromPath(rawPath)}
+          status="complete"
+        />
+      ))}
       {isStreaming ? (
         <ChainOfThoughtStep
           icon={FileTextIcon}
@@ -250,7 +244,8 @@ function PatternsPart({ data }: { data: PatternsData }) {
       ) : (
         <ChainOfThoughtContent>
           <ChainOfThoughtStep
-            label="Analysing requirements…"
+            icon={FileTextIcon}
+            label="Reading architectural patterns…"
             status={isStreaming ? "active" : "complete"}
           />
         </ChainOfThoughtContent>

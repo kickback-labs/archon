@@ -466,8 +466,15 @@ def get_diagram_examples(
 
     # Basic examples
     if diagram_type in [DiagramType.AWS, DiagramType.ALL]:
-        examples["aws_basic"] = """with Diagram("Web Service Architecture", show=False):
-    ELB("lb") >> EC2("web") >> RDS("userdb")
+        examples[
+            "aws_basic"
+        ] = """with Diagram("Web Service on AWS", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    users = Users("End Users")
+    lb = ELB("Load Balancer\\nDistribute incoming traffic")
+    web = EC2("Web Server\\nServe application requests")
+    db = RDS("PostgreSQL DB\\nStore user data")
+    users >> lb >> web >> db
 """
 
     if diagram_type in [DiagramType.SEQUENCE, DiagramType.ALL]:
@@ -512,80 +519,78 @@ def get_diagram_examples(
     if diagram_type in [DiagramType.AWS, DiagramType.ALL]:
         examples[
             "aws_grouped_workers"
-        ] = """with Diagram("Grouped Workers", show=False, direction="TB"):
-    ELB("lb") >> [EC2("worker1"),
-                  EC2("worker2"),
-                  EC2("worker3"),
-                  EC2("worker4"),
-                  EC2("worker5")] >> RDS("events")
+        ] = """with Diagram("Grouped Workers on AWS", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    users = Users("End Users")
+    lb = ELB("Load Balancer\\nDistribute traffic")
+    with Cluster("Worker Pool"):
+        workers = [EC2("Worker 1\\nProcess jobs"),
+                   EC2("Worker 2\\nProcess jobs"),
+                   EC2("Worker 3\\nProcess jobs")]
+    db = RDS("Event Store\\nPersist results")
+    users >> lb >> workers >> db
 """
 
         examples[
             "aws_clustered_web_services"
-        ] = """with Diagram("Clustered Web Services", show=False):
-    dns = Route53("dns")
-    lb = ELB("lb")
+        ] = """with Diagram("Clustered Web Services on AWS", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    users = Users("End Users")
+    dns = Route53("Route 53\\nDNS routing")
+    lb = ELB("Load Balancer\\nDistribute traffic")
 
-    with Cluster("Services"):
-        svc_group = [ECS("web1"),
-                     ECS("web2"),
-                     ECS("web3")]
+    with Cluster("Application Layer"):
+        svc_group = [ECS("web-1\\nServe requests"),
+                     ECS("web-2\\nServe requests"),
+                     ECS("web-3\\nServe requests")]
 
-    with Cluster("DB Cluster"):
-        db_primary = RDS("userdb")
-        db_primary - [RDS("userdb ro")]
+    with Cluster("Data Layer"):
+        db_primary = RDS("Primary DB\\nWrite traffic")
+        db_primary - [RDS("Read Replica\\nRead traffic")]
+        cache = ElastiCache("Redis Cache\\nSession & query cache")
 
-    memcached = ElastiCache("memcached")
-
-    dns >> lb >> svc_group
-    svc_group >> db_primary
-    svc_group >> memcached
+    users >> dns >> lb >> svc_group
+    svc_group >> cache >> db_primary
 """
 
         examples[
             "aws_event_processing"
-        ] = """with Diagram("Event Processing", show=False):
-    source = EKS("k8s source")
+        ] = """with Diagram("Event Processing on AWS", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    users = Users("End Users")
 
-    with Cluster("Event Flows"):
-        with Cluster("Event Workers"):
-            workers = [ECS("worker1"),
-                       ECS("worker2"),
-                       ECS("worker3")]
+    with Cluster("Ingestion"):
+        source = EKS("EKS Cluster\\nProduce events")
+        queue = SQS("SQS Queue\\nBuffer events")
 
-        queue = SQS("event queue")
+    with Cluster("Processing"):
+        handlers = [Lambda("Processor 1\\nHandle events"),
+                    Lambda("Processor 2\\nHandle events")]
 
-        with Cluster("Processing"):
-            handlers = [Lambda("proc1"),
-                        Lambda("proc2"),
-                        Lambda("proc3")]
+    with Cluster("Storage"):
+        store = S3("S3 Bucket\\nRaw event archive")
+        dw = Redshift("Redshift\\nAnalytics warehouse")
 
-    store = S3("events store")
-    dw = Redshift("analytics")
-
-    source >> workers >> queue >> handlers
+    users >> source >> queue >> handlers
     handlers >> store
     handlers >> dw
 """
 
         examples[
             "aws_bedrock"
-        ] = """with Diagram("S3 Image Processing with Bedrock", show=False, direction="LR"):
-    user = Users("User")
+        ] = """with Diagram("S3 Image Processing with Bedrock", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    user = Users("End Users")
 
-    with Cluster("Amazon S3 Bucket"):
-        input_folder = S3("Input Folder")
-        output_folder = S3("Output Folder")
+    with Cluster("Amazon S3"):
+        input_folder = S3("Input Bucket\\nReceive uploaded images")
+        output_folder = S3("Output Bucket\\nStore processed results")
 
-    lambda_function = Lambda("Image Processor Function")
-    bedrock = Bedrock("Claude Sonnet 3.7")
+    fn = Lambda("Image Processor\\nOrchestrate pipeline")
+    bedrock = Bedrock("Claude Sonnet\\nDetect bounding boxes")
 
-    user >> Edge(label="Upload Image") >> input_folder
-    input_folder >> Edge(label="Trigger") >> lambda_function
-    lambda_function >> Edge(label="Process Image") >> bedrock
-    bedrock >> Edge(label="Return Bounding Box") >> lambda_function
-    lambda_function >> Edge(label="Upload Processed Image") >> output_folder
-    output_folder >> Edge(label="Download Result") >> user
+    user >> input_folder >> fn >> bedrock
+    bedrock >> fn >> output_folder
 """
 
     if diagram_type in [DiagramType.K8S, DiagramType.ALL]:
@@ -616,62 +621,54 @@ def get_diagram_examples(
     if diagram_type in [DiagramType.ONPREM, DiagramType.ALL]:
         examples[
             "onprem_web_service"
-        ] = """with Diagram("Advanced Web Service with On-Premises", show=False):
-    ingress = Nginx("ingress")
+        ] = """with Diagram("Web Service On-Premises", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    users = Users("End Users")
+    ingress = Nginx("Nginx\\nIngress & TLS termination")
 
-    metrics = Prometheus("metric")
-    metrics << Grafana("monitoring")
-
-    with Cluster("Service Cluster"):
+    with Cluster("Application Layer"):
         grpcsvc = [
-            Server("grpc1"),
-            Server("grpc2"),
-            Server("grpc3")]
+            Server("gRPC Server 1\\nHandle requests"),
+            Server("gRPC Server 2\\nHandle requests")]
 
-    with Cluster("Sessions HA"):
-        primary = Redis("session")
-        primary - Redis("replica") << metrics
-        grpcsvc >> primary
+    with Cluster("Data Layer"):
+        primary = Redis("Redis Primary\\nSession store")
+        primary - Redis("Redis Replica\\nRead failover")
+        db = PostgreSQL("PostgreSQL\\nStore user records")
 
-    with Cluster("Database HA"):
-        primary = PostgreSQL("users")
-        primary - PostgreSQL("replica") << metrics
-        grpcsvc >> primary
+    with Cluster("Analytics"):
+        aggregator = Fluentd("Fluentd\\nAggregate logs")
+        stream = Kafka("Kafka\\nStream events")
 
-    aggregator = Fluentd("logging")
-    aggregator >> Kafka("stream") >> Spark("analytics")
-
-    ingress >> grpcsvc >> aggregator
+    users >> ingress >> grpcsvc
+    grpcsvc >> primary
+    grpcsvc >> db
+    grpcsvc >> aggregator >> stream
 """
 
         examples[
             "onprem_web_service_colored"
-        ] = """with Diagram(name="Advanced Web Service with On-Premise (colored)", show=False):
-    ingress = Nginx("ingress")
+        ] = """with Diagram("Web Service with Async Flows", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    users = Users("End Users")
+    ingress = Nginx("Nginx\\nIngress & load balancing")
 
-    metrics = Prometheus("metric")
-    metrics << Edge(color="firebrick", style="dashed") << Grafana("monitoring")
-
-    with Cluster("Service Cluster"):
+    with Cluster("Application Layer"):
         grpcsvc = [
-            Server("grpc1"),
-            Server("grpc2"),
-            Server("grpc3")]
+            Server("gRPC Server 1\\nHandle requests"),
+            Server("gRPC Server 2\\nHandle requests")]
 
-    with Cluster("Sessions HA"):
-        primary = Redis("session")
-        primary - Edge(color="brown", style="dashed") - Redis("replica") << Edge(label="collect") << metrics
-        grpcsvc >> Edge(color="brown") >> primary
+    with Cluster("Data Layer"):
+        session = Redis("Redis\\nSession store")
+        db = PostgreSQL("PostgreSQL\\nStore user records")
 
-    with Cluster("Database HA"):
-        primary = PostgreSQL("users")
-        primary - Edge(color="brown", style="dotted") - PostgreSQL("replica") << Edge(label="collect") << metrics
-        grpcsvc >> Edge(color="black") >> primary
+    aggregator = Fluentd("Fluentd\\nAggregate & forward logs")
+    stream = Kafka("Kafka\\nStream events")
 
-    aggregator = Fluentd("logging")
-    aggregator >> Edge(label="parse") >> Kafka("stream") >> Edge(color="black", style="bold") >> Spark("analytics")
-
-    ingress >> Edge(color="darkgreen") << grpcsvc >> Edge(color="darkorange") >> aggregator
+    users >> ingress >> grpcsvc
+    grpcsvc >> session
+    grpcsvc >> db
+    grpcsvc >> Edge(style="dashed") >> aggregator >> stream
 """
 
     if diagram_type in [DiagramType.CUSTOM, DiagramType.ALL]:
@@ -699,30 +696,23 @@ with Diagram("Broker Consumers", show=False):
         # Three-tier serverless architecture following GCP best practices
         examples[
             "gcp_basic"
-        ] = """with Diagram("GCP Serverless Application", show=False, direction="TB"):
-    with Cluster("Production Project"):
-        with Cluster("API Layer"):
-            endpoints = Endpoints("Cloud Endpoints")
-            gateway = APIGateway("API Gateway")
+        ] = """with Diagram("GCP Serverless Application", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    users = Users("End Users")
+    lb = LoadBalancing("Cloud LB\\nRoute & load balance")
 
-        with Cluster("Application Layer"):
-            with Cluster("Cloud Run Functions"):
-                api_handler = Functions("api-handler")
-                async_worker = Functions("async-worker")
-                trigger_fn = Functions("storage-trigger")
+    with Cluster("Application Layer"):
+        api_handler = Functions("API Handler\\nProcess requests")
+        events = PubSub("Pub/Sub\\nAsync event bus")
+        async_worker = Functions("Async Worker\\nBackground processing")
 
-            events = PubSub("event-bus")
+    with Cluster("Data Layer"):
+        firestore = Firestore("Firestore\\nStore documents")
+        cache = Memorystore("Memorystore\\nCache hot data")
 
-        with Cluster("Data Layer"):
-            firestore = Firestore("documents")
-            storage = Storage("objects")
-            cache = Memorystore("cache")
-
-    endpoints >> gateway >> api_handler
-    api_handler >> firestore
+    users >> lb >> api_handler
     api_handler >> cache >> firestore
     api_handler >> events >> async_worker
-    storage >> trigger_fn >> events
 """
 
         examples[
@@ -744,30 +734,27 @@ with Diagram("Broker Consumers", show=False):
 
         examples[
             "gcp_microservices"
-        ] = """with Diagram("GCP Microservices Architecture", show=False):
-    lb = LoadBalancing("load balancer")
+        ] = """with Diagram("GCP Microservices Architecture", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    users = Users("End Users")
+    lb = LoadBalancing("Cloud LB\\nDistribute user traffic")
 
-    with Cluster("Production Project"):
-        with Cluster("VPC Network"):
-            with Cluster("us-central1 Subnet"):
-                services = [
-                    Run("auth-service"),
-                    Run("user-service"),
-                    Run("order-service")
-                ]
+    with Cluster("Application Layer"):
+        auth = Run("Auth Service\\nAuthenticate users")
+        orders = Run("Orders Service\\nManage order lifecycle")
 
-            with Cluster("Data Subnet"):
-                sql = SQL("users")
-                firestore = Firestore("orders")
-                cache = Memorystore("cache")
+    with Cluster("Messaging"):
+        queue = PubSub("Pub/Sub\\nDecouple services")
 
-        queue = PubSub("events")
+    with Cluster("Data Layer"):
+        sql = SQL("Cloud SQL\\nStore user records")
+        firestore = Firestore("Firestore\\nStore order data")
+        cache = Memorystore("Memorystore\\nCache sessions")
 
-    lb >> services
-    services[0] >> sql
-    services[1] >> cache >> sql
-    services[2] >> firestore
-    services >> queue
+    users >> lb >> [auth, orders]
+    auth >> cache >> sql
+    orders >> firestore
+    orders >> queue
 """
 
         # MLOps architecture with Vertex AI Pipelines following Google Cloud best practices
@@ -916,8 +903,16 @@ with Diagram("Broker Consumers", show=False):
 
     # Azure examples
     if diagram_type in [DiagramType.AZURE, DiagramType.ALL]:
-        examples["azure_basic"] = """with Diagram("Azure Web Application", show=False):
-    AppServices("web app") >> SQLServers("database") >> BlobStorage("storage")
+        examples[
+            "azure_basic"
+        ] = """with Diagram("Azure Web Application", show=False, direction="LR",
+    graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"}):
+    users = Users("End Users")
+    app = AppServices("App Service\\nHost web application")
+    db = SQLServers("Azure SQL\\nStore relational data")
+    storage = BlobStorage("Blob Storage\\nStore static assets")
+    users >> app >> db
+    app >> storage
 """
 
         examples[

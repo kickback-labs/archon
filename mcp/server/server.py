@@ -50,19 +50,25 @@ WORKFLOW — follow in order:
 DIAGRAM DESIGN PRINCIPLES:
 Good diagrams are immediately readable. Follow these rules strictly:
 
-- SCOPE: Show only the core data/request path. Omit supporting concerns (monitoring, logging, IAM, CI/CD) unless the user explicitly asks for them. These can be separate diagrams.
-- SIZE: Target 8–15 nodes. Hard limit of 20 nodes per diagram. More nodes = less clarity.
-- LAYOUT: Use direction="LR" (left-to-right) as the default. Use "TB" only for hierarchical/layered diagrams. Prefer a single linear or branching flow over a web of connections.
-- CLUSTERS: Group nodes that belong to the same logical layer or boundary (e.g. "Application Layer", "Data Layer"). Do not create clusters for just 1 or 2 nodes. Do not nest more than 2 cluster levels.
-- CONNECTIONS: Every arrow must represent a real data or control flow. Avoid connecting everything to everything. Prefer a clean left-to-right chain.
-- LABELS: Use short, human-readable node labels (e.g. "API Gateway", "Orders DB"). Avoid technical IDs or redundant suffixes.
+- SCOPE: Show only the most important services in the core data/request path. Omit monitoring, logging, IAM, and CI/CD unless explicitly requested.
+- SIZE: Target 8–12 nodes. Hard limit of 15 nodes. When in doubt, cut — fewer nodes makes a better diagram.
+- LAYOUT: Always use direction="LR" (left-to-right). Do not use "TB".
+- CLUSTERS: Organize nodes into named architectural layers — use standard layer names where they apply: "Edge", "Network Layer", "Application Layer" / "Compute Layer", "Data Layer", "Messaging Layer", "Storage Layer". Only create a cluster when 2+ nodes belong to the same layer. Do not nest more than 2 cluster levels. Use invisible edges (Edge(style="invis")) between clusters or nodes to enforce left-to-right column ordering.
+- CONNECTIONS: Connect layers to layers, not individual nodes to everything. The canonical flow is: Users → Edge cluster → Network cluster → Application/Compute cluster → Data/Storage cluster. Draw one representative arrow per layer-to-layer handoff. Never fan out edges from a single node to nodes in multiple unrelated layers. No edge labels — do not use Edge(label=...) under any circumstances. Use Edge(style="dashed") only for async or background flows between layers. Do NOT draw edges between nodes that belong to the same cluster (same layer) unless there is an explicit intra-layer flow such as primary→replica replication.
+- NODE LABELS: Every node must have a two-line label: line 1 is the service name, line 2 is a short description of its role. Keep each line under ~25 characters. Use \\n to separate them. Example: LoadBalancing("Global HTTP LB\\nSingle entry point").
+- GRAPH ATTRS: Always set graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"} on the Diagram for clean arrow routing.
 - USERS: Always represent end users with Users (diagrams.onprem.client.Users).
 
-WHAT TO EXCLUDE BY DEFAULT (make separate diagrams only if asked):
+WHAT TO EXCLUDE BY DEFAULT:
 - CloudWatch, logging, monitoring nodes
 - IAM, KMS, security scanning nodes
 - CI/CD pipelines
 - Cross-region replication unless it is the core topic
+
+PROVIDER CONSISTENCY:
+- For single-provider architectures (e.g. AWS-only), every icon MUST come from that provider's namespace (diagrams.aws.*). Do NOT accidentally include icons from other providers — if a service has no icon in the target provider, omit the node.
+- For explicitly multi-cloud architectures, you may intentionally mix provider namespaces. In that case call list_icons once per provider used, and group each provider's nodes inside a clearly labelled cluster (e.g. "AWS Region", "Azure Services", "GCP Project").
+- The ONLY always-permitted cross-provider node is Users (diagrams.onprem.client.Users).
 
 SUPPORTED PROVIDERS: AWS, GCP, Azure, Kubernetes, on-prem, hybrid, multi-cloud, SaaS.""",
 )
@@ -100,17 +106,23 @@ async def mcp_generate_diagram(
     - Do not use parentheses inside diagram title strings.
 
     DIAGRAM DESIGN — keep it clean and readable:
-    - TARGET 8–15 nodes. Hard limit: 20 nodes. Strip anything that isn't core to the data path.
-    - Use direction="LR" by default (left-to-right flow). Use "TB" for layered/hierarchical diagrams.
-    - Group related nodes into Clusters (e.g. "Application Layer", "Data Layer"). Max 2 nesting levels.
-    - Draw only meaningful data/control flow arrows. Avoid a fully-connected web.
+    - TARGET 8–12 nodes. Hard limit: 15 nodes. Strip anything that isn't core to the data path.
+    - Always use direction="LR" (left-to-right). Do not use "TB".
+    - Always set graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"} for clean routing.
+    - Group related nodes into Clusters using standard architectural layer names: "Edge", "Network Layer", "Application Layer" / "Compute Layer", "Data Layer", "Messaging Layer", "Storage Layer". Only create a cluster when 2+ nodes belong to it. Max 2 nesting levels.
+    - Use invisible edges (Edge(style="invis")) between clusters or nodes to enforce left-to-right column ordering.
+    - Draw only meaningful data/control flow arrows between layers, not between individual nodes at random. Canonical flow: Users → Edge → Network → Application/Compute → Data/Storage. One representative arrow per layer-to-layer handoff. Never fan out from a single node to nodes in multiple unrelated layers. Never draw edges between nodes in the same cluster unless there is an explicit intra-layer flow (e.g. DB primary→replica). Never add labels to edges — do not use Edge(label=...).
+    - Use Edge(style="dashed") only for async or background flows between layers.
     - Omit monitoring, logging, IAM, and CI/CD nodes unless the user explicitly asks for them.
+    - PROVIDER CONSISTENCY: For single-provider architectures, every icon must come from that provider's namespace — do not accidentally include icons from other providers. For explicitly multi-cloud architectures, you may mix namespaces intentionally; call list_icons once per provider and group each provider's nodes in a labelled cluster. The only always-permitted cross-provider node is Users (diagrams.onprem.client.Users).
+    - Every node label must be two lines: line 1 = service name (~25 chars max), line 2 = short role description (~25 chars max). Use \\n to separate. Example: Run("Cloud Run\\nHandle API requests").
 
     COMMON PATTERNS:
     - Linear flow:   user >> gateway >> service >> database
     - Branching:     service >> [worker1, worker2, worker3]
-    - Grouping:      with Cluster("Data Layer"): db = RDS("orders")
-    - Styled edge:   service >> Edge(label="async", style="dashed") >> queue
+    - Grouping:      with Cluster("Data Layer"): db = RDS("Orders DB\\nStore order records")
+    - Async edge:    service >> Edge(style="dashed") >> queue
+    - Column order:  clusterA_node >> Edge(style="invis") >> clusterB_node
     """
     # Special handling for test cases
     if code == 'with Diagram("Test", show=False):\n    ELB("lb") >> EC2("web")':
