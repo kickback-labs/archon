@@ -8,6 +8,7 @@ import {
 import {
   getChatById,
   getMessagesByChatId,
+  getUserSettings,
   updateChatTitle,
   upsertMessages,
 } from "@/lib/db/queries";
@@ -41,6 +42,9 @@ export async function POST(req: Request) {
     .map((p) => (p.type === "text" ? p.text : ""))
     .join("\n");
 
+  // Load user settings (may be null if not configured yet)
+  const userSettings = await getUserSettings(session.user.id);
+
   // Classify intent — single structured-output call, no tool loop
   const intent = await classifyIntent(userText, previousMessages);
 
@@ -66,12 +70,14 @@ export async function POST(req: Request) {
           uiMessages,
           originalMessages: uiMessages,
           generateMessageId: generateId,
+          userSettings,
           onFinish,
         })
       : runFollowup({
           uiMessages,
           originalMessages: uiMessages,
           generateMessageId: generateId,
+          userSettings,
           onFinish,
         });
 

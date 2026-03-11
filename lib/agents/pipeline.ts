@@ -25,6 +25,7 @@ import {
 } from "./validator-agent";
 import type { CategorySlug } from "@/lib/tools/retrieve-tool";
 import type { WaveOutput } from "./wave-tools";
+import type { UserSettings } from "@/lib/db/schema";
 
 // ─── Data part schemas ────────────────────────────────────────────────────────
 
@@ -289,6 +290,32 @@ function extractUserPrompt(uiMessages: UIMessage[]): string {
     .join("\n");
 }
 
+/**
+ * Format user settings into a context block that can be prepended to prompts.
+ * Returns an empty string if settings are null/undefined.
+ */
+function formatSettingsContext(settings: UserSettings | null | undefined): string {
+  if (!settings) return "";
+
+  const lines: string[] = [
+    "## User Profile (from saved settings — treat as explicitly stated preferences)",
+    `- Scale: ${settings.scale}`,
+    `- Cloud Expertise: ${settings.cloudExpertise}`,
+    `- Budget: ${settings.budget}`,
+  ];
+
+  if (settings.providers && settings.providers.length > 0) {
+    lines.push(`- Preferred Providers: ${settings.providers.join(", ")}`);
+  }
+
+  if (settings.compliance && settings.compliance.length > 0) {
+    lines.push(`- Compliance Requirements: ${settings.compliance.join(", ")}`);
+  }
+
+  lines.push("");
+  return lines.join("\n");
+}
+
 // ─── Main pipeline ────────────────────────────────────────────────────────────
 
 /**
@@ -309,12 +336,14 @@ export function runArchonPipeline({
   originalMessages,
   abortSignal,
   generateMessageId = generateId,
+  userSettings,
   onFinish,
 }: {
   uiMessages: UIMessage[];
   originalMessages?: UIMessage[];
   abortSignal?: AbortSignal;
   generateMessageId?: () => string;
+  userSettings?: UserSettings | null;
   onFinish?: (params: { messages: UIMessage[] }) => Promise<void> | void;
 }) {
   return createUIMessageStream<ArchonUIMessage>({
@@ -325,6 +354,14 @@ export function runArchonPipeline({
     >[0]["onFinish"],
     execute: async ({ writer }) => {
       const userPrompt = extractUserPrompt(uiMessages);
+      const settingsContext = formatSettingsContext(userSettings);
+
+      // Prepend user settings to the prompt so the requirements agent
+      // treats them as explicitly stated preferences instead of falling
+      // back to conservative defaults.
+      const enrichedPrompt = settingsContext
+        ? `${settingsContext}\n## User Request\n${userPrompt}`
+        : userPrompt;
 
       // ── Phase 0: Requirements Agent ────────────────────────────────────
       // Use a stable id so every subsequent write updates the same part in-place
@@ -337,7 +374,7 @@ export function runArchonPipeline({
       });
 
       const reqResult = await requirementsAgent.stream({
-        prompt: userPrompt,
+        prompt: enrichedPrompt,
         abortSignal,
       });
 
@@ -729,12 +766,14 @@ export function runFollowup({
   originalMessages,
   abortSignal,
   generateMessageId = generateId,
+  userSettings,
   onFinish,
 }: {
   uiMessages: UIMessage[];
   originalMessages?: UIMessage[];
   abortSignal?: AbortSignal;
   generateMessageId?: () => string;
+  userSettings?: UserSettings | null;
   onFinish?: (params: { messages: UIMessage[] }) => Promise<void> | void;
 }) {
   return createUIMessageStream<ArchonUIMessage>({
@@ -744,6 +783,11 @@ export function runFollowup({
       typeof createUIMessageStream<ArchonUIMessage>
     >[0]["onFinish"],
     execute: ({ writer }) => {
+      const settingsContext = formatSettingsContext(userSettings);
+      const followupSystem = settingsContext
+        ? `${FOLLOWUP_SYSTEM}\n\n${settingsContext}`
+        : FOLLOWUP_SYSTEM;
+
       const historyMessages = uiMessages
         .map((m) => ({
           role: m.role as "user" | "assistant",
@@ -757,7 +801,7 @@ export function runFollowup({
       const result = streamText({
         model: makeModel(),
         providerOptions: agentProviderOptions,
-        system: FOLLOWUP_SYSTEM,
+        system: followupSystem,
         messages: historyMessages,
         abortSignal,
       });
