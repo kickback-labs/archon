@@ -9,7 +9,6 @@ services:
       POSTGRES_DB: archon
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Init scripts run in alphabetical order on first start
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
       - ./scripts/seed-embeddings.sql:/docker-entrypoint-initdb.d/seed-embeddings.sql:ro
     expose:
@@ -29,8 +28,6 @@ services:
     environment:
       MCP_HOST: "0.0.0.0"
       MCP_PORT: "8000"
-      # Diagrams are written under /tmp inside the container.
-      # The shared volume below makes them visible to the nextjs container.
     volumes:
       - diagrams_tmp:/tmp
     expose:
@@ -46,20 +43,14 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      # Point the MCP client at the mcp service (Docker internal DNS)
       MCP_SERVER_URL: "http://mcp:8000/mcp"
-      # The diagrams route allows any path under /tmp, so this is informational
-      # but also used as the allowed base in route.ts
       DIAGRAM_OUTPUT_DIR: "/tmp/archon-diagrams"
-      # Local postgres (no neon.tech in URL → uses node-postgres driver)
       DATABASE_URL: "postgresql://archon:archon@postgres:5432/archon"
-      # Secrets — supply via a .env file or your container runtime
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
       BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3000}"
       NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
     volumes:
-      # Same shared volume so Next.js can read the PNGs written by the MCP server
       - diagrams_tmp:/tmp
     depends_on:
       postgres:
@@ -68,7 +59,5 @@ services:
         condition: service_started
 
 volumes:
-  # Named volume shared between mcp (writer) and nextjs (reader) for diagrams
   diagrams_tmp:
-  # Persistent storage for PostgreSQL data
   postgres_data:

@@ -67,3 +67,16 @@ pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Via Docker
+
+You can also run Archon instantly via docker. 
+
+Make sure the `.env` file is configured, then run:
+
+```bash
+docker compose build
+docker compose up
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
