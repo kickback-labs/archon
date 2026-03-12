@@ -1,0 +1,18 @@
+# Git
+.git
+.gitignore
+
+# Virtual environment (recreated inside Docker by uv)
+.venv
+.python-version
+
+# Python caches
+__pycache__
+*.pyc
+*.pyo
+.ruff_cache
+
+# Dev tooling
+
+# Misc
+.DS_Store
