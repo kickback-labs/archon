@@ -361,23 +361,10 @@ export function computeAdditionalServicesCap(
   const scale = settings.scale ?? "";
   const expertise = settings.cloudExpertise ?? "";
 
-  // High scale AND high expertise → 20
-  if (
-    (scale === ">100k" || scale === "100k+") &&
-    (expertise === "high" || expertise === "expert")
-  )
-    return 20;
+  if (scale === "> 100k" && expertise === "high") return 20;
+  if (scale === "1k–100k" || expertise === "medium") return 15;
 
-  // Mid-range: 1k–100k users OR medium expertise → 15
-  if (
-    scale === "1k-100k" ||
-    scale === "1k–100k" ||
-    expertise === "medium" ||
-    expertise === "intermediate"
-  )
-    return 15;
-
-  // Default (< 1k users OR low expertise) → 10
+  // Default
   return 10;
 }
 
