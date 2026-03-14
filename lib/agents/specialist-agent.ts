@@ -1,134 +1,59 @@
 import { InferAgentUIMessage, stepCountIs, ToolLoopAgent } from "ai";
 import { makeModel, agentProviderOptions } from "./model";
 import { retrieveTool, type CategorySlug } from "@/lib/tools/retrieve-tool";
+import fs from "fs";
+import path from "path";
 
-// ─── Shared model factory ─────────────────────────────────────────────────────
-// Model configuration is centralised in ./model.ts — change it there to affect
-// all agents in the pipeline simultaneously.
+// ─── Prompt templates ─────────────────────────────────────────────────────────
 
-// ─── Pillar Recommendation output schema (for agent instructions) ─────────────
+const SPECIALIST_TEMPLATE = fs.readFileSync(
+  path.join(process.cwd(), "data", "prompts", "specialist.md"),
+  "utf-8",
+);
 
-export const PILLAR_RECOMMENDATION_SCHEMA = `{
-  "pillar": "<category_slug>",
-  "services": [
-    {
-      "provider": "AWS" | "Azure" | "GCP",
-      "service_name": "Service Name",
-      "role": "e.g. primary API compute",
-      "justification": "Why this service for this workload"
-    }
-  ],
-  "caveats": ["Any gotchas, limits, or conditions to watch"]
-}`;
+const GUIDANCE_DIR = path.join(
+  process.cwd(),
+  "data",
+  "prompts",
+  "specialist-guidance",
+);
 
-// ─── Pillar-specific reasoning guidance ──────────────────────────────────────
+const PILLAR_SLUGS = [
+  "compute",
+  "storage",
+  "database",
+  "networking",
+  "security_identity",
+  "ai_ml",
+  "analytics",
+  "integration_messaging",
+  "devops",
+  "migration_hybrid",
+  "other",
+] as const satisfies readonly CategorySlug[];
 
-const PILLAR_GUIDANCE: Record<CategorySlug, string> = {
-  compute: `You are the Compute Specialist. Reason about:
-- VM vs container vs FaaS abstraction level — choose the right operational overhead for the team's expertise
-- Cold start implications for latency-sensitive or event-driven workloads
-- Burst vs sustained load patterns — serverless excels at burst, containers suit sustained
-- Scaling model: autoscaling groups, container orchestration, or function concurrency limits
-- The compute pattern selected (e.g. microservices → containers, event-driven → FaaS)
-- Managed service preference relative to team's cloud expertise level`,
+const PILLAR_GUIDANCE = Object.fromEntries(
+  PILLAR_SLUGS.map((slug) => [
+    slug,
+    fs.readFileSync(path.join(GUIDANCE_DIR, `${slug}.md`), "utf-8").trim(),
+  ]),
+) as Record<CategorySlug, string>;
 
-  storage: `You are the Storage Specialist. Reason about:
-- Object vs block vs file storage — match the access pattern (blobs, volumes, shared filesystems)
-- Durability and availability requirements — replication, cross-region redundancy
-- Data volume growth trajectory and cost implications at scale
-- Access frequency (hot/warm/cold tiering and lifecycle policies)
-- Integration with the compute layer (e.g. S3 with Lambda, EBS with EC2)
-- Managed vs self-managed trade-offs for the team's expertise level`,
+// ─── Shared output type ───────────────────────────────────────────────────────
 
-  database: `You are the Database Specialist. Reason about:
-- ACID requirements — relational vs eventually-consistent NoSQL
-- Consistency model: strong vs eventual — what does the workload actually need?
-- Access pattern: OLTP (transactional reads/writes), OLAP (analytics), key-value lookups
-- Data volume and growth — will the schema need to scale horizontally?
-- Managed vs self-managed: RDS vs Aurora vs self-hosted Postgres on EC2
-- Cache layer need: is a cache (Redis/Memcached) implied by the access pattern?
-- Data warehouse vs operational database — separate concerns if analytics is in scope`,
+/**
+ * The combined output of a wave: a record from pillar slug to the specialist's
+ * final UIMessage. The UI reads individual specialist states from this record
+ * to drive progress rendering.
+ */
+export type WaveOutput = Partial<Record<CategorySlug, SpecialistAgentUIMessage>>;
 
-  networking: `You are the Networking Specialist. You receive Wave 1 recommendations and must reason about:
-- Load balancer type: ALB (HTTP/HTTPS, path routing) vs NLB (TCP/UDP, ultra-low latency) — follow the compute choice
-- VPC design: subnets (public/private), NAT gateway, VPC endpoints for services
-- CDN placement: is there public-facing static or cacheable content? Which compute sits behind it?
-- DNS routing: simple, weighted, latency-based, or failover — follow the deployment pattern
-- Service mesh or API gateway need if microservices are present
-- Network security: security groups, NACLs, private endpoints
-- Multi-region topology if availability or latency requirements demand it`,
-
-  security_identity: `You are the Security & Identity Specialist. Security is NEVER optional. You receive Wave 1 recommendations and must reason about:
-- IAM role design: principle of least privilege for every service identified in Wave 1
-- Secrets management: which services have credentials? Use secrets manager, not env vars
-- WAF placement: is there a CDN or load balancer where a WAF should sit?
-- Encryption: at-rest (KMS) and in-transit (TLS) for every data store and API
-- Compliance requirements from the Requirements Schema — map them to specific controls
-- Threat detection: GuardDuty / Security Center / Security Command Center if production workload
-- Zero-trust posture if the pattern demands it`,
-
-  ai_ml: `You are the AI/ML Specialist. Reason about:
-- Training vs inference workloads — very different service requirements
-- Managed AI/ML platforms vs custom model deployment (SageMaker, Vertex AI, Azure ML)
-- Pre-built AI APIs (vision, NLP, speech) vs fine-tuned models — complexity vs control trade-off
-- GPU instance requirements for training or large inference workloads
-- Vector databases or embedding services if RAG patterns are implied
-- MLOps pipeline: experiment tracking, model registry, deployment automation
-- Cost: AI/ML workloads can be expensive — align GPU tier with budget posture`,
-
-  analytics: `You are the Analytics Specialist. Reason about:
-- Streaming vs batch analytics — event-driven patterns imply streaming (Kinesis/Pub Sub/Event Hubs)
-- Data warehouse selection: Redshift vs BigQuery vs Synapse — scale, SQL compatibility, cost model
-- ETL/ELT pipeline tooling: managed (Glue, Dataflow) vs orchestrated (Airflow)
-- BI and visualisation layer: managed dashboards vs self-hosted
-- Data lake architecture if raw data retention is needed alongside the warehouse
-- Real-time vs near-real-time latency requirements for analytics queries
-- Data volume and query concurrency — size the warehouse appropriately`,
-
-  integration_messaging: `You are the Integration & Messaging Specialist. Reason about:
-- Queue vs pub/sub vs event streaming — SQS/Queue Storage/Cloud Tasks vs SNS/Event Grid vs Kafka/Kinesis/Pub Sub
-- Message ordering, deduplication, and delivery guarantee requirements
-- Event-driven vs request-response — the chosen pattern determines the messaging topology
-- Workflow orchestration: Step Functions / Logic Apps / Workflows if multi-step processes exist
-- API management: API Gateway if external-facing APIs need rate limiting, auth, or versioning
-- Dead-letter queues and error handling for async workloads
-- Fan-out patterns: one event → multiple consumers`,
-
-  devops: `You are the DevOps Specialist. You receive Wave 1 recommendations and must reason about:
-- CI/CD pipeline tooling that matches the compute stack (CodePipeline for AWS-native, GitHub Actions for any cloud)
-- Container registry if containers are in use (ECR, ACR, Artifact Registry)
-- IaC framework: Terraform (multi-cloud) vs CDK/Pulumi (code-first) vs Bicep (Azure-native)
-- Monitoring and observability: follow the compute choice — Prometheus+Grafana for containers, CloudWatch for Lambda, Datadog for multi-cloud
-- Logging: centralised log aggregation appropriate for the service count and volume
-- Alerting: thresholds for SLOs implied by the primary quality attribute
-- Cost management tooling if budget posture is minimal or moderate`,
-
-  migration_hybrid: `You are the Migration & Hybrid Specialist. Reason about:
-- Migration strategy: rehost (lift-and-shift), replatform, or refactor — match to team expertise
-- Database migration tooling: DMS (AWS), Database Migration Service (Azure/GCP)
-- Hybrid connectivity: VPN vs Direct Connect / ExpressRoute / Cloud Interconnect — bandwidth and latency requirements
-- Edge computing needs: is there on-premises processing that must stay local?
-- Migration waves: what to move first to minimise risk and downtime
-- Rollback strategy and cutover plan
-- Existing infrastructure from Requirements Schema — integrate, migrate, or retire?`,
-
-  other: `You are the Other Services Specialist. Reason about niche or domain-specific services that don't fit the standard pillars:
-- IoT platforms: device management, telemetry ingestion, edge processing (IoT Core, IoT Hub, Cloud IoT)
-- Geospatial services: mapping APIs, location data, routing (Location Service, Azure Maps, Google Maps Platform)
-- Communication APIs: email, SMS, push notifications (SES/SNS, Communication Services, Firebase Cloud Messaging)
-- Virtual Desktop Infrastructure (VDI): AppStream, Windows Virtual Desktop, Cloud Workstations
-- Blockchain/distributed ledger if the workload requires it
-- Any domain-specific managed service implied by the workload description
-Only include services that are genuinely implied by the workload — do not pad the recommendation`,
-};
-
-// ─── Base specialist instructions ─────────────────────────────────────────────
+// ─── Instructions builder ─────────────────────────────────────────────────────
 
 function buildSpecialistInstructions(
   pillar: CategorySlug,
   wave: 1 | 2,
 ): string {
-  const guidance = PILLAR_GUIDANCE[pillar];
   const wave2Context =
     wave === 2
       ? `
@@ -138,57 +63,9 @@ You are a Wave 2 specialist. Your pillar (${pillar}) is structurally dependent o
 `
       : "";
 
-  return `You are the ${pillar} specialist cloud architect agent. You are part of Phase 2 of the Archon pipeline.
-${wave2Context}
-## Mandatory Execution Rules
-
-These rules are NON-NEGOTIABLE. Violating any of them is a pipeline failure.
-
-1. **You MUST call \`retrieve\` exactly once.** Do NOT skip it. Do NOT reason about services without first retrieving the relevant documents. Do NOT call it more than once. Producing output without calling \`retrieve\` is a critical error.
-2. **Your retrieval query must be specific and context-grounded.** It must reflect the architectural pattern in use, the specific decision you are resolving, and the relevant constraints (scale, budget, managed preference, providers). Do NOT use a generic query like "cloud services for ${pillar}". Do NOT use the raw user message as the query.
-3. **Do NOT add \`managed\` or \`pricing_model\` filters to the retrieve call.** These filters are unreliable and have been removed. Only use \`query\`, \`pillar\`, and optionally \`providers\` and \`top_k\`.
-4. **Your final response MUST be ONLY the raw JSON object** — no markdown fences, no preamble, no explanation. Output JSON immediately after reasoning is complete.
-5. **\`pillar\` in your output MUST be exactly \`"${pillar}"\`.** Do NOT change it.
-6. **\`services\` must list every service you recommend.** Do NOT leave it empty. If you recommend multiple services (e.g. primary + cache), list all of them.
-
----
-
-## Your Reasoning Guidance
-
-${guidance}
-
----
-
-## Your Process
-
-**Step 1 — Formulate a retrieval query**
-
-Write a precise, context-grounded query that encodes:
-- The architectural pattern in use (from the Pattern Output)
-- The specific decision you are resolving for the ${pillar} pillar
-- Key constraints from the Requirements Schema (scale, budget, managed preference, providers)
-
-Example of a BAD query: \`"${pillar} services"\`
-Example of a GOOD query: \`"serverless container compute for event-driven microservices, burst scaling, moderate budget, AWS"\`
-
-**Step 2 — Call \`retrieve\` EXACTLY ONCE**
-
-Call \`retrieve\` with:
-- \`query\`: your context-grounded query from Step 1
-- \`pillar\`: always \`"${pillar}"\`
-- \`providers\` (optional): only if the Requirements Schema specifies a provider preference
-
-Do NOT add any other parameters. Do NOT call \`retrieve\` again after this.
-
-**Step 3 — Reason and decide**
-
-Read every returned document. For each service, consider how it fits the pattern, the requirements, and the constraints. Choose the best option(s) for this pillar. Document every meaningful decision with what you chose, what you rejected, and why.
-
-**Step 4 — Output**
-
-Output the JSON immediately. No preamble. No markdown fences.
-
-${PILLAR_RECOMMENDATION_SCHEMA}`;
+  return SPECIALIST_TEMPLATE.replace(/\{\{PILLAR\}\}/g, pillar)
+    .replace("{{WAVE_CONTEXT}}", wave2Context)
+    .replace("{{PILLAR_GUIDANCE}}", PILLAR_GUIDANCE[pillar]);
 }
 
 // ─── Specialist agent factory ─────────────────────────────────────────────────

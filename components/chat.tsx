@@ -47,7 +47,7 @@ import type { DiagramState } from "@/components/diagram-panel";
 import type { ServicesPanelState } from "@/components/services-panel";
 import type { PatternAgentUIMessage } from "@/lib/agents/pattern-agent";
 import type { ValidatorAgentUIMessage } from "@/lib/agents/validator-agent";
-import type { WaveOutput } from "@/lib/agents/wave-tools";
+import type { WaveOutput } from "@/lib/agents/specialist-agent";
 import type { CategorySlug } from "@/lib/tools/retrieve-tool";
 import {
   BotIcon,
@@ -71,7 +71,14 @@ import {
   TruckIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useState, Fragment, useRef, useMemo, useCallback, useEffect } from "react";
+import {
+  useState,
+  Fragment,
+  useRef,
+  useMemo,
+  useCallback,
+  useEffect,
+} from "react";
 import { useRouter } from "next/navigation";
 
 // ─── Pillar metadata ──────────────────────────────────────────────────────────
@@ -190,10 +197,12 @@ function PipelineProgress({
     return readPart?.input?.paths ?? [];
   })();
 
-  // Wave outputs (strip the `complete` flag key)
+  // Wave outputs (strip the `complete` and `total` keys)
   const wave1Output: WaveOutput = wave1
     ? (Object.fromEntries(
-        Object.entries(wave1).filter(([k]) => k !== "complete"),
+        Object.entries(wave1).filter(
+          ([k]) => k !== "complete" && k !== "total",
+        ),
       ) as WaveOutput)
     : {};
   const wave2Output: WaveOutput = wave2
@@ -217,7 +226,7 @@ function PipelineProgress({
             {requirements.state === "streaming" ? (
               <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
             ) : (
-              <FileTextIcon className="size-3.5 shrink-0" />
+              <CheckCircleIcon className="size-3.5 shrink-0" />
             )}
             <span
               className={
@@ -263,7 +272,10 @@ function PipelineProgress({
         {(Object.keys(wave1Output) as CategorySlug[]).map((pillar) => {
           const { icon: Icon, label } = PILLAR_META[pillar];
           return (
-            <TaskItem key={`w1-${pillar}`} className="flex items-center gap-1.5">
+            <TaskItem
+              key={`w1-${pillar}`}
+              className="flex items-center gap-1.5"
+            >
               <Icon className="size-3.5 shrink-0" />
               <span>{label}</span>
             </TaskItem>
@@ -276,9 +288,17 @@ function PipelineProgress({
             <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
             <span className="text-foreground">
               {wave1DoneCount > 0
-                ? `Specialist agents running… (${wave1DoneCount}/8)`
-                : "Delegating to specialist agents…"}
+                ? `Core specialist agents running… (${wave1DoneCount}/${wave1?.total ?? wave1DoneCount})`
+                : "Core specialist agents running…"}
             </span>
+          </TaskItem>
+        )}
+
+        {/* Wave 1 — complete checkpoint */}
+        {wave1?.complete && (
+          <TaskItem className="flex items-center gap-1.5">
+            <CheckCircleIcon className="size-3.5 shrink-0" />
+            <span>Core pillars analysed</span>
           </TaskItem>
         )}
 
@@ -286,7 +306,10 @@ function PipelineProgress({
         {(Object.keys(wave2Output) as CategorySlug[]).map((pillar) => {
           const { icon: Icon, label } = PILLAR_META[pillar];
           return (
-            <TaskItem key={`w2-${pillar}`} className="flex items-center gap-1.5">
+            <TaskItem
+              key={`w2-${pillar}`}
+              className="flex items-center gap-1.5"
+            >
               <Icon className="size-3.5 shrink-0" />
               <span>{label}</span>
             </TaskItem>
@@ -299,9 +322,17 @@ function PipelineProgress({
             <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
             <span className="text-foreground">
               {wave2DoneCount > 0
-                ? `Reactive agents running… (${wave2DoneCount}/3)`
-                : "Delegating reactive agents…"}
+                ? `Reactive specialist agents running… (${wave2DoneCount}/3)`
+                : "Reactive specialist agents running…"}
             </span>
+          </TaskItem>
+        )}
+
+        {/* Wave 2 — complete checkpoint */}
+        {wave2?.complete && (
+          <TaskItem className="flex items-center gap-1.5">
+            <CheckCircleIcon className="size-3.5 shrink-0" />
+            <span>Reactive pillars analysed</span>
           </TaskItem>
         )}
 
@@ -311,7 +342,7 @@ function PipelineProgress({
             {validator.state === "streaming" ? (
               <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
             ) : (
-              <ShieldIcon className="size-3.5 shrink-0" />
+              <CheckCircleIcon className="size-3.5 shrink-0" />
             )}
             <span
               className={
@@ -331,9 +362,15 @@ function PipelineProgress({
 
 // ─── Followup agent tool-call renderer (merged) ───────────────────────────────
 
-type FollowupToolPart = { type: string; state: string; input?: unknown; output?: unknown };
+type FollowupToolPart = {
+  type: string;
+  state: string;
+  input?: unknown;
+  output?: unknown;
+};
 
 const FOLLOWUP_TOOL_TYPES = new Set([
+  "tool-find_service_doc",
   "tool-list_service_docs",
   "tool-read_service_doc",
   "tool-update_architecture",
@@ -357,12 +394,32 @@ function FollowupAgentProgress({
 
   return (
     <Task defaultOpen>
-      <TaskTrigger
-        title={isRunning ? "Researching service options…" : "Research complete"}
-      />
+      <TaskTrigger title={isRunning ? "Researching…" : "Research complete"} />
       <TaskContent>
         {parts.map((p, i) => {
           const isActive = p.state !== "output-available";
+
+          if (p.type === "tool-find_service_doc") {
+            const input = p.input as
+              | { provider?: string; keyword?: string }
+              | undefined;
+            const provider = input?.provider ?? "";
+            const keyword = input?.keyword ?? "";
+            return (
+              <TaskItem key={i} className="flex items-center gap-1.5">
+                {isActive ? (
+                  <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+                ) : (
+                  <SearchIcon className="size-3.5 shrink-0" />
+                )}
+                <span className={isActive ? "text-foreground" : ""}>
+                  {isActive
+                    ? `Searching ${provider} docs for "${keyword}"…`
+                    : `Found "${keyword}" in ${provider} docs`}
+                </span>
+              </TaskItem>
+            );
+          }
 
           if (p.type === "tool-list_service_docs") {
             const input = p.input as
@@ -463,15 +520,15 @@ function useCurrentPhase(messages: ArchonAgentUIMessage[]): string | null {
       }
       if (part.type === "data-archon-patterns") {
         const d = part.data as PatternsData;
-        if (d.state === "streaming") return "Selecting architectural patterns";
+        if (d.state === "streaming") return "Reading architectural patterns";
       }
       if (part.type === "data-archon-wave1") {
         const d = part.data as Wave1Data;
         if (!d.complete) {
           const done = Object.keys(d).filter((k) => k !== "complete").length;
           return done > 0
-            ? `Running Wave 1 specialists (${done} done)`
-            : "Running Wave 1 specialists";
+            ? `Core specialist agents running… (${done - 1} done)`
+            : "Core specialist agents running…";
         }
       }
       if (part.type === "data-archon-wave2") {
@@ -479,8 +536,8 @@ function useCurrentPhase(messages: ArchonAgentUIMessage[]): string | null {
         if (!d.complete) {
           const done = Object.keys(d).filter((k) => k !== "complete").length;
           return done > 0
-            ? `Running Wave 2 specialists (${done} done)`
-            : "Running Wave 2 specialists";
+            ? `Reactive specialist agents running… (${done} done)`
+            : "Reactive specialist agents running…";
         }
       }
       if (part.type === "data-archon-validator") {
@@ -541,7 +598,9 @@ export function Chat({
       new DefaultChatTransport({
         api: "/api/chat",
         prepareSendMessagesRequest({ messages, id: chatId }) {
-          return { body: { message: messages[messages.length - 1], id: chatId } };
+          return {
+            body: { message: messages[messages.length - 1], id: chatId },
+          };
         },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

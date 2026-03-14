@@ -11,8 +11,6 @@
  * 2. A deterministic pipeline (lib/agents/pipeline.ts) — calls each phase
  *    directly as TypeScript, passing results as in-memory objects with no LLM
  *    orchestrator between phases.
- *
- * The UI message type is kept here for convenience so import sites don't break.
  */
 
 import type { UIMessage } from "ai";
@@ -21,5 +19,6 @@ import type { UIMessage } from "ai";
 export type ArchonAgentUIMessage = UIMessage;
 
 export { classifyIntent } from "./router";
-export { runArchonPipeline, runFollowup } from "./pipeline";
+export { runArchonPipeline } from "./pipeline";
+export { runFollowup } from "./followup";
 export type { ServiceCard } from "./pipeline";
