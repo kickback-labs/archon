@@ -84,6 +84,9 @@ export async function POST(req: Request) {
           generateMessageId: generateId,
           userSettings,
           onFinish,
+          onPersistServices: async (services: ServiceCard[]) => {
+            await upsertArchitectureServices({ chatId: id, services });
+          },
         });
 
   return createUIMessageStreamResponse({ stream });

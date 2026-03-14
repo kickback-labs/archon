@@ -39,6 +39,12 @@ import {
   ChainOfThoughtHeader,
   ChainOfThoughtStep,
 } from "@/components/ai-elements/chain-of-thought";
+import {
+  Task,
+  TaskContent,
+  TaskTrigger,
+  TaskItem,
+} from "@/components/ai-elements/task";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { ArchonAgentUIMessage } from "@/lib/agents/archon-agent";
@@ -58,18 +64,20 @@ import {
   FileTextIcon,
   GitBranchIcon,
   LayersIcon,
+  LoaderCircleIcon,
   MessageSquareIcon,
   MonitorIcon,
   NetworkIcon,
   PaperclipIcon,
   RefreshCcwIcon,
+  SearchIcon,
   ServerIcon,
   ShieldIcon,
   SparklesIcon,
   TruckIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useState, Fragment, useRef, useMemo, useEffect } from "react";
+import { useState, Fragment, useRef, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 // ─── Pillar metadata ──────────────────────────────────────────────────────────
@@ -444,6 +452,105 @@ function ValidatorPart({ data }: { data: ValidatorData }) {
   );
 }
 
+// ─── Followup agent tool-call renderer (merged) ───────────────────────────────
+
+type FollowupToolPart = { type: string; state: string; input?: unknown; output?: unknown };
+
+const FOLLOWUP_TOOL_TYPES = new Set([
+  "tool-list_service_docs",
+  "tool-read_service_doc",
+  "tool-update_architecture",
+]);
+
+function FollowupAgentProgress({
+  parts,
+  isMessageStreaming,
+}: {
+  parts: FollowupToolPart[];
+  /** True while the parent message is still being streamed — derived from
+   *  useChat's status, not from parts' states, so the header stays stable
+   *  between tool calls when all parts are momentarily "output-available". */
+  isMessageStreaming: boolean;
+}) {
+  // A part is "active" if the model is currently waiting for its result.
+  // isMessageStreaming covers the gap between tool calls where all parts have
+  // output-available but the stream hasn't finished yet.
+  const isAnyActive = parts.some((p) => p.state !== "output-available");
+  const isRunning = isMessageStreaming || isAnyActive;
+
+  return (
+    <Task defaultOpen>
+      <TaskTrigger
+        title={isRunning ? "Researching service options…" : "Research complete"}
+      />
+      <TaskContent>
+        {parts.map((p, i) => {
+          const isActive = p.state !== "output-available";
+
+          if (p.type === "tool-list_service_docs") {
+            const input = p.input as
+              | { provider?: string; pillar?: string }
+              | undefined;
+            const provider = input?.provider ?? "";
+            const pillar = input?.pillar;
+            const label = pillar
+              ? `Searching ${provider}/${pillar} docs`
+              : `Searching ${provider} service docs`;
+            return (
+              <TaskItem key={i} className="flex items-center gap-1.5">
+                {isActive ? (
+                  <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+                ) : (
+                  <SearchIcon className="size-3.5 shrink-0" />
+                )}
+                <span className={isActive ? "text-foreground" : ""}>
+                  {label}
+                </span>
+              </TaskItem>
+            );
+          }
+
+          if (p.type === "tool-read_service_doc") {
+            const input = p.input as { path?: string } | undefined;
+            const docPath = input?.path ?? "service doc";
+            return (
+              <TaskItem key={i} className="flex items-center gap-1.5">
+                {isActive ? (
+                  <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+                ) : (
+                  <FileTextIcon className="size-3.5 shrink-0" />
+                )}
+                <span className={isActive ? "text-foreground" : ""}>
+                  Read {docPath}
+                </span>
+              </TaskItem>
+            );
+          }
+
+          if (p.type === "tool-update_architecture") {
+            return (
+              <TaskItem key={i} className="flex items-center gap-1.5">
+                {isActive ? (
+                  <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+                ) : (
+                  <LayersIcon className="size-3.5 shrink-0" />
+                )}
+                <span className={isActive ? "text-foreground" : ""}>
+                  {isActive
+                    ? "Applying changes and regenerating diagram…"
+                    : "Services and diagram updated"}
+                </span>
+              </TaskItem>
+            );
+          }
+
+          return null;
+        })}
+      </TaskContent>
+    </Task>
+  );
+}
+
 // ─── Attach PDF button ────────────────────────────────────────────────────────
 
 function AttachPDFButton() {
@@ -548,29 +655,46 @@ export function Chat({
   const router = useRouter();
   const refreshedRef = useRef(false);
 
+  // Stable references that must not be recreated on every render —
+  // a new transport object causes useChat to reinitialize, which produces
+  // a new `messages` array reference, which re-triggers the effects below,
+  // which call setDiagram/setServices, which re-renders the parent, ad infinitum.
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        prepareSendMessagesRequest({ messages, id: chatId }) {
+          return { body: { message: messages[messages.length - 1], id: chatId } };
+        },
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const handleFinish = useCallback(() => {
+    if (!refreshedRef.current) {
+      refreshedRef.current = true;
+      router.refresh();
+    }
+  }, [router]);
+
   const { messages, status, sendMessage, regenerate } =
     useChat<ArchonAgentUIMessage>({
       id,
       messages: initialMessages as ArchonAgentUIMessage[] | undefined,
-      transport: new DefaultChatTransport({
-        api: "/api/chat",
-        // Only send the last (new) message — server loads history from DB
-        prepareSendMessagesRequest({ messages, id }) {
-          return { body: { message: messages[messages.length - 1], id } };
-        },
-      }),
-      onFinish: () => {
-        // Refresh the layout once after the first assistant reply so the
-        // sidebar picks up the new chat (and its auto-generated title).
-        if (!refreshedRef.current) {
-          refreshedRef.current = true;
-          router.refresh();
-        }
-      },
+      transport,
+      onFinish: handleFinish,
     });
 
   const isStreaming = status === "streaming";
   const currentPhase = useCurrentPhase(messages);
+
+  // Ref-based deduplication: skip the callback when the derived state hasn't
+  // actually changed. Without this guard, every parent re-render (triggered by
+  // setDiagram/setServices) can produce a new messages reference and re-fire the
+  // effect with the same value, causing an infinite update loop.
+  const lastDiagramKeyRef = useRef<string>("");
+  const lastServicesKeyRef = useRef<string>("");
 
   // Notify parent whenever the diagram state changes.
   useEffect(() => {
@@ -586,6 +710,13 @@ export function Chat({
         break;
       }
     }
+
+    // Compute a stable key for the current diagram state.
+    const key = diagramData
+      ? `${diagramData.state}|${diagramData.imagePath ?? ""}|${diagramData.error ?? ""}`
+      : "";
+    if (key === lastDiagramKeyRef.current) return;
+    lastDiagramKeyRef.current = key;
 
     if (!diagramData) {
       onDiagramChange(null);
@@ -620,6 +751,17 @@ export function Chat({
         break;
       }
     }
+
+    // Compute a stable key. For "complete" state, fingerprint the service list
+    // by name so we don't re-emit when the object reference changes but the data
+    // is identical.
+    const key = servicesData
+      ? servicesData.state === "complete"
+        ? `complete|${(servicesData.coreServices ?? []).map((s) => s.serviceName).join(",")}|${(servicesData.secondaryServices ?? []).map((s) => s.serviceName).join(",")}`
+        : `${servicesData.state}`
+      : "";
+    if (key === lastServicesKeyRef.current) return;
+    lastServicesKeyRef.current = key;
 
     if (!servicesData) {
       onServicesChange(null);
@@ -687,15 +829,18 @@ export function Chat({
           ) : (
             <>
               {(() => {
-                // Find the index of the last assistant message that contains
-                // any data-archon-* part. Only that message should render the
-                // pipeline phase UI — all earlier assistant messages skip those
-                // parts to avoid showing duplicate phase sections when multiple
-                // pipeline runs exist in the same chat.
+                // Find the index of the last assistant message that ran the
+                // FULL pipeline. We discriminate on data-archon-requirements
+                // because that part is emitted exclusively by the pipeline —
+                // followup messages may also carry data-archon-diagram /
+                // data-archon-services (written by update_architecture) but
+                // never data-archon-requirements. Using .startsWith("data-archon-")
+                // as the discriminator caused followup messages with panel data
+                // to steal the index, making the pipeline CoT sections vanish.
                 const lastPipelineMessageIndex = messages.reduce(
                   (lastIdx, msg, idx) =>
                     msg.role === "assistant" &&
-                    msg.parts.some((p) => p.type.startsWith("data-archon-"))
+                    msg.parts.some((p) => p.type === "data-archon-requirements")
                       ? idx
                       : lastIdx,
                   -1,
@@ -731,6 +876,25 @@ export function Chat({
                             return true;
                           })
                       : message.parts.map((part, idx) => ({ part, idx }));
+
+                  // Collect all followup tool parts so FollowupAgentProgress
+                  // can receive the complete list in one merged Task block.
+                  const followupToolParts =
+                    message.role === "assistant"
+                      ? (message.parts.filter((p) =>
+                          FOLLOWUP_TOOL_TYPES.has(p.type),
+                        ) as FollowupToolPart[])
+                      : [];
+
+                  // True only while this specific message is the active stream.
+                  // Derived from the overall status (not from parts' states) so
+                  // the Task header stays stable between tool calls.
+                  const isThisMessageStreaming =
+                    isStreaming && messageIndex === messages.length - 1;
+
+                  // Flag: render the merged component only on the FIRST
+                  // followup tool part encountered in partsToRender.
+                  let followupGroupRendered = false;
 
                   return (
                     <Fragment key={message.id}>
@@ -789,6 +953,19 @@ export function Chat({
                             <ValidatorPart
                               key={key}
                               data={part.data as ValidatorData}
+                            />
+                          );
+                        }
+
+                        // ── Followup tool calls (merged into one Task block) ──
+                        if (FOLLOWUP_TOOL_TYPES.has(part.type)) {
+                          if (followupGroupRendered) return null;
+                          followupGroupRendered = true;
+                          return (
+                            <FollowupAgentProgress
+                              key={`${message.id}-followup`}
+                              parts={followupToolParts}
+                              isMessageStreaming={isThisMessageStreaming}
                             />
                           );
                         }

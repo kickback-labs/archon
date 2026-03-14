@@ -6,9 +6,12 @@ import {
   createUIMessageStream,
   generateId,
   stepCountIs,
+  tool,
   type UIMessage,
   type FilePart,
 } from "ai";
+import { readFile } from "fs/promises";
+import path from "path";
 import { z } from "zod";
 import { makeModel, agentProviderOptions } from "./model";
 import { createDiagramMCPClient } from "./mcp-client";
@@ -78,6 +81,8 @@ export type ArchonDataTypes = {
     state: "generating" | "complete" | "error";
     /** URL path served by /api/diagrams/... */
     imagePath?: string;
+    /** Python diagrams code used to generate the PNG — captured from the generate_diagram tool call input. */
+    diagramCode?: string;
     error?: string;
   };
   /** Emitted when service cards extraction completes (Phase 5b, parallel with diagram) */
@@ -320,8 +325,6 @@ For EVERY bullet in both sections, write a note grounded in the user's actual wo
 - Respect the service count caps above — exceeding them is a failure
 - Always use human-readable pillar names in service bullets — never raw slugs: write "Security & Identity" not \`security_identity\`, "AI/ML" not \`ai_ml\`, "Integration & Messaging" not \`integration_messaging\`, etc.
 - NEVER echo the user's settings anywhere in the output — no scale figures (e.g. "<1k users", "> 100k users"), no budget labels (e.g. "cost-focused", "low budget"), no expertise levels (e.g. "low expertise", "medium expertise"). These are internal configuration values, not part of the architectural narrative.`;
-
-const FOLLOWUP_SYSTEM = `You are Archon, a senior cloud architect AI. Answer the user's question directly and concisely. You may reference the prior architectural recommendation in the conversation. Do not run any multi-phase analysis — just answer the question.`;
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
@@ -941,10 +944,23 @@ CODING RULES:
               return JSON.stringify(o);
             }
 
-            // Find the diagram path from the generate_diagram tool result
+            // Find the diagram path and source code from the generate_diagram tool
             let imagePath: string | undefined;
+            let diagramCode: string | undefined;
             let lastGenerateError: string | undefined;
             for (const step of diagramGenResult.steps) {
+              // Capture Python code from the tool call input
+              for (const call of step.toolCalls ?? []) {
+                if (
+                  !("toolName" in call) ||
+                  call.toolName !== "generate_diagram"
+                )
+                  continue;
+                const inp = (call as { input?: unknown }).input as
+                  | Record<string, unknown>
+                  | undefined;
+                if (inp && typeof inp.code === "string") diagramCode = inp.code;
+              }
               for (const toolResult of step.toolResults ?? []) {
                 if (
                   !("toolName" in toolResult) ||
@@ -968,7 +984,7 @@ CODING RULES:
               writer.write({
                 type: "data-archon-diagram",
                 id: "phase-diagram",
-                data: { state: "complete", imagePath },
+                data: { state: "complete", imagePath, diagramCode },
               });
             } else {
               writer.write({
@@ -1068,8 +1084,220 @@ CODING RULES:
   });
 }
 
+// ─── Data directory ───────────────────────────────────────────────────────────
+
+const DATA_DIR = path.join(process.cwd(), "data");
+
+// Allowed subdirectories the model may read from (service docs only).
+const ALLOWED_PROVIDER_DIRS = ["aws", "azure", "gcp"] as const;
+
+// ─── Pillar label normalisation ───────────────────────────────────────────────
+
+const PILLAR_LABEL_MAP: Record<string, string> = {
+  ai_ml: "AI/ML",
+  analytics: "Analytics",
+  compute: "Compute",
+  database: "Database",
+  devops: "DevOps",
+  integration_messaging: "Integration & Messaging",
+  migration_hybrid: "Migration & Hybrid",
+  networking: "Networking",
+  other: "Other",
+  security_identity: "Security & Identity",
+  storage: "Storage",
+};
+
 /**
- * Run a direct follow-up answer without the pipeline.
+ * Convert any pillar slug (e.g. "integration_messaging", "Security & Identity")
+ * to its canonical human-readable label. Falls back to the raw string unchanged.
+ */
+function normalisePillarLabel(raw: string): string {
+  const key = raw
+    .toLowerCase()
+    .replace(/[&\s]+/g, "_")
+    .replace(/-+/g, "_");
+  return PILLAR_LABEL_MAP[key] ?? raw;
+}
+
+// ─── Followup system prompt ───────────────────────────────────────────────────
+
+const FOLLOWUP_SYSTEM_TOOLS = `You are Archon, a senior cloud architect AI.
+
+You have three tools:
+
+1. **list_service_docs** — lists the .md documentation files available for a provider and optional pillar.
+   Valid providers: aws, azure, gcp
+   Valid pillars: ai_ml, analytics, compute, database, devops, integration_messaging, migration_hybrid, networking, other, security_identity, storage
+
+2. **read_service_doc** — reads one documentation file. Use the exact slug returned by list_service_docs.
+   Path format: \`{provider}/{pillar}/{slug}.md\`
+
+3. **update_architecture** — updates the diagram and services panel with a modified service list.
+   Only call this when the user explicitly wants a service change or architectural modification.
+   Always pass the COMPLETE services list — every core and secondary service, including unchanged ones.
+
+---
+
+## ⚠️ NON-NEGOTIABLE RULE — NO EXCEPTIONS
+
+**You MUST call list_service_docs and read_service_doc for any specific cloud service the user asks about, before writing a single word of your response — UNLESS that exact service is already listed under "Core Services" or "Additional Services" in the Current Architecture section below.**
+
+This rule applies even if you believe you know the service well from training. Training knowledge may be outdated, incomplete, or wrong. The documentation files are the authoritative source and must be consulted every time.
+
+Do NOT treat this as optional or as a Case B question just because the service sounds familiar. "Can we use X?", "What about X?", "Should we add X?" — if X is not already in the Current Architecture, you MUST read the doc first. Writing a response before reading the doc is a critical failure.
+
+---
+
+## WORKFLOW
+
+### Case A — user mentions a specific service NOT listed in the Current Architecture below
+
+Complete ALL steps in order. Never skip or reorder them.
+
+STEP 1 · Call list_service_docs for the relevant provider and pillar.
+STEP 2 · Call read_service_doc for the specific service file. Read the entire file.
+STEP 3 · Write your text response (assessment, reasoning, recommendation).
+STEP 4 · If the user wants the service added or swapped: call update_architecture.
+
+**No text output until Steps 1 and 2 are complete. No exceptions.**
+
+**When in doubt — use Case A and read the doc.**
+
+### Case B — user asks a general question OR asks about a service ALREADY in the Current Architecture
+
+STEP 1 · Write your text response.
+STEP 2 · If the user wants a change: call update_architecture.
+
+---
+
+## update_architecture rules
+
+When calling update_architecture:
+- Pass the **COMPLETE** list of services (core + secondary). Never drop services that didn't change.
+- For every **core** service you MUST include \`coreTag\`: a short (≤ 50 chars) plain-English phrase explaining why the app cannot function without this service. Everyday language only — no technical jargon. Good: "Runs all the app's backend API logic". Bad: "Stateless compute tier".
+- For **secondary** services, \`coreTag\` must be null or omitted.
+- \`pillarLabel\` must be human-readable: "Security & Identity" not "security_identity", "AI/ML" not "ai_ml", "Integration & Messaging" not "integration_messaging".
+
+---
+
+## Response style
+
+- Be concise. 2–4 sentences is enough for most follow-up answers.
+- Do not repeat the full service list — the UI panels update automatically.
+- Never use nested bullet points.`;
+
+// ─── Followup update schema ───────────────────────────────────────────────────
+
+const FollowupServiceItemSchema = z.object({
+  tier: z.enum(["core", "secondary"]).describe(
+    "Whether this is a core (essential) or secondary (enhancing) service.",
+  ),
+  provider: z.enum(["AWS", "Azure", "GCP"]),
+  serviceName: z.string().describe("Full official name, e.g. 'Amazon S3' or 'Cloud Run'."),
+  pillarLabel: z.string().describe(
+    "Human-readable pillar name. Use 'Security & Identity' not 'security_identity', 'AI/ML' not 'ai_ml', 'Integration & Messaging' not 'integration_messaging', etc.",
+  ),
+  coreTag: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "REQUIRED for core services (tier='core'): a short (≤ 50 chars) plain-English phrase explaining why the app CANNOT function without this service. Everyday language only — not technical jargon. Example: 'Runs all the app backend API logic'. Example: 'Stores every video and user file'. MUST be null for secondary services (tier='secondary').",
+    ),
+  description: z.string().describe(
+    "App-tailored description starting with the service name. Explain what this service does in this specific application. Core ≤ 300 chars, secondary ≤ 150 chars.",
+  ),
+});
+
+const FollowupUpdateSchema = z.object({
+  coreServices: z.array(FollowupServiceItemSchema),
+  secondaryServices: z.array(FollowupServiceItemSchema),
+  synthesisContext: z
+    .string()
+    .describe(
+      "A concise description (≤ 400 chars) of the updated architecture for use in diagram re-generation. Include the primary services, their roles, and the flow between them.",
+    ),
+});
+
+// ─── Followup diagram system prompt (mirrors Phase 5 but for updates) ────────
+
+function buildFollowupDiagramSystem(diagramOutputDir: string): string {
+  return `You are a cloud architect generating a clear, readable infrastructure diagram using the Python diagrams package.
+
+STRICT WORKFLOW — follow in order:
+1. Call get_diagram_examples with the relevant provider (e.g. "aws", "gcp", "azure") to learn the syntax.
+2. Call list_icons with provider_filter set to the cloud provider to get the exact icon class names. You MUST do this — never guess icon names.
+3. Call generate_diagram with the code you write.
+
+ICON USAGE — provider-prefixed aliases (CRITICAL):
+The runtime does NOT use wildcard imports. Every provider module is pre-imported as a prefixed alias.
+You MUST always qualify every icon class with its alias — never use bare class names.
+  Correct:   aws_compute.EC2(...)      gcp_storage.Storage(...)    onprem_client.Users(...)
+  Wrong:     EC2(...)                  Storage(...)                 Users(...)
+
+AVAILABLE ALIASES:
+  diagrams.aws.*       → aws_compute, aws_storage, aws_database, aws_network, aws_analytics,
+                         aws_integration, aws_ml, aws_iot, aws_security, aws_devtools,
+                         aws_management, aws_migration, aws_mobile, aws_media, aws_general,
+                         aws_cost, aws_ar, aws_game, aws_enablement, aws_engagement,
+                         aws_quantum, aws_robotics, aws_satellite, aws_enduser,
+                         aws_blockchain, aws_business
+  diagrams.gcp.*       → gcp_compute, gcp_storage, gcp_database, gcp_network, gcp_analytics,
+                         gcp_ml, gcp_devtools, gcp_operations, gcp_iot, gcp_api,
+                         gcp_security, gcp_migration
+  diagrams.azure.*     → azure_compute, azure_storage, azure_database, azure_network,
+                         azure_web, azure_analytics, azure_integration, azure_devops,
+                         azure_ml, azure_iot, azure_general, azure_mobile, azure_security,
+                         azure_identity, azure_migration
+  diagrams.k8s.*       → k8s_compute, k8s_storage, k8s_network, k8s_rbac, k8s_infra,
+                         k8s_ecosystem, k8s_podconfig, k8s_controlplane, k8s_clusterconfig,
+                         k8s_chaos, k8s_others, k8s_group
+  diagrams.onprem.*    → onprem_compute, onprem_database, onprem_network, onprem_storage,
+                         onprem_messaging, onprem_queue, onprem_monitoring, onprem_inmemory,
+                         onprem_analytics, onprem_client, onprem_container, onprem_ci,
+                         onprem_cd, onprem_vcs, onprem_iac, onprem_gitops, onprem_registry,
+                         onprem_security, onprem_identity, onprem_dns, onprem_etl,
+                         onprem_workflow, onprem_tracing, onprem_mlops, onprem_certificates,
+                         onprem_auth, onprem_aggregator, onprem_logging, onprem_groupware,
+                         onprem_proxmox, onprem_search
+  diagrams.generic.*   → generic_compute, generic_storage, generic_database, generic_network,
+                         generic_os, generic_device, generic_place, generic_virtualization,
+                         generic_blank
+  diagrams.saas.*      → saas_crm, saas_identity, saas_chat, saas_recommendation, saas_cdn,
+                         saas_communication, saas_media, saas_logging, saas_security,
+                         saas_social, saas_alerting, saas_analytics, saas_automation,
+                         saas_filesharing
+
+DIAGRAM DESIGN — clarity over completeness:
+- SCOPE: Show only the most important services in the core request/data path. Do NOT include monitoring, logging, IAM/KMS, or CI/CD nodes unless the user explicitly asked for them.
+- SIZE: Target 8–12 nodes. Hard maximum: 15 nodes. When in doubt, cut — fewer nodes makes a better diagram.
+- LAYOUT: Always use direction="LR" (left-to-right). Do not use "TB".
+- CLUSTERS: Group nodes into clusters that reflect their architectural role — not their AWS/GCP/Azure category. Use these names and strictly follow what belongs in each:
+  • "Edge" — CDN, DNS, WAF, API Gateway, load balancers only.
+  • "Compute" — application servers, containers, functions, autoscaling groups.
+  • "Data" — databases (relational, NoSQL, cache, search).
+  • "Storage" — object stores (S3, GCS, Blob).
+  • "Messaging" — queues, topics, event buses, streams.
+  • "Analytics" — data warehouses, stream processors, lake services.
+  Only create a cluster when 2+ nodes belong to it. Do not nest more than 2 levels deep.
+- CONNECTIONS: Use concentrate="true" and splines="spline". No edge labels.
+- NODE LABELS: Every node label must have two lines separated by \\n. Keep each line under ~25 characters.
+- USERS: Always represent end users with onprem_client.Users(...).
+
+CODING RULES:
+- Always set workspace_dir="${diagramOutputDir}"
+- Never write import statements. Start the code directly with: with Diagram(
+- Always set graph_attr={"splines": "spline", "concentrate": "true", "ranksep": "2.0", "nodesep": "0.8"} on the Diagram.
+- Only use icon class names that appeared verbatim in the list_icons response, qualified with their alias.
+- Do not name any variable "os" — it shadows the built-in used by the runtime.
+- Do not use parentheses inside diagram title strings.`;
+}
+
+/**
+ * Run a follow-up answer. When the user requests a service change or
+ * architectural modification, this agent can:
+ *  1. Read service documentation files from the knowledge base.
+ *  2. Update the diagram and services panel without re-running the full pipeline.
  */
 export function runFollowup({
   uiMessages,
@@ -1078,6 +1306,7 @@ export function runFollowup({
   generateMessageId = generateId,
   userSettings,
   onFinish,
+  onPersistServices,
 }: {
   uiMessages: UIMessage[];
   originalMessages?: UIMessage[];
@@ -1085,6 +1314,7 @@ export function runFollowup({
   generateMessageId?: () => string;
   userSettings?: UserSettings | null;
   onFinish?: (params: { messages: UIMessage[] }) => Promise<void> | void;
+  onPersistServices?: (services: ServiceCard[]) => Promise<void> | void;
 }) {
   return createUIMessageStream<ArchonUIMessage>({
     originalMessages: (originalMessages ?? uiMessages) as ArchonUIMessage[],
@@ -1092,12 +1322,99 @@ export function runFollowup({
     onFinish: onFinish as Parameters<
       typeof createUIMessageStream<ArchonUIMessage>
     >[0]["onFinish"],
-    execute: ({ writer }) => {
+    execute: async ({ writer }) => {
       const settingsContext = formatSettingsContext(userSettings);
-      const followupSystem = settingsContext
-        ? `${FOLLOWUP_SYSTEM}\n\n${settingsContext}`
-        : FOLLOWUP_SYSTEM;
+      const baseSystem = settingsContext
+        ? `${FOLLOWUP_SYSTEM_TOOLS}\n\n${settingsContext}`
+        : FOLLOWUP_SYSTEM_TOOLS;
 
+      // ── Extract current architecture context from message history ──────────
+
+      /** Walk backward to find the last complete services snapshot. */
+      function extractCurrentServices(msgs: UIMessage[]) {
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i];
+          if (m.role !== "assistant") continue;
+          const part = m.parts.findLast((p) => p.type === "data-archon-services");
+          if (part && "data" in part) {
+            const d = part.data as {
+              state: string;
+              coreServices?: ServiceCard[];
+              secondaryServices?: ServiceCard[];
+            };
+            if (d.state === "complete" && d.coreServices && d.secondaryServices) {
+              return { coreServices: d.coreServices, secondaryServices: d.secondaryServices };
+            }
+          }
+        }
+        return null;
+      }
+
+      /** Walk backward to find the last captured Python diagram code. */
+      function extractDiagramCode(msgs: UIMessage[]): string | undefined {
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i];
+          if (m.role !== "assistant") continue;
+          const part = m.parts.findLast((p) => p.type === "data-archon-diagram");
+          if (part && "data" in part) {
+            const d = part.data as { state: string; diagramCode?: string };
+            if (d.state === "complete" && d.diagramCode) return d.diagramCode;
+          }
+        }
+        return undefined;
+      }
+
+      const currentServices = extractCurrentServices(uiMessages);
+      const previousDiagramCode = extractDiagramCode(uiMessages);
+
+      // Build context blocks appended to the system prompt
+      let architectureContext = "";
+      if (currentServices) {
+        const coreLines = currentServices.coreServices
+          .map(
+            (s) =>
+              `- ${s.serviceName} (${s.provider}, ${s.pillarLabel}) [core]: ${s.description}`,
+          )
+          .join("\n");
+        const secondaryLines = currentServices.secondaryServices
+          .map(
+            (s) =>
+              `- ${s.serviceName} (${s.provider}, ${s.pillarLabel}): ${s.description}`,
+          )
+          .join("\n");
+        architectureContext = [
+          "",
+          "",
+          "## Current Architecture",
+          "",
+          "These are the services currently selected. Preserve all of them unless the user explicitly asks to remove or swap one. When you call update_architecture, pass the COMPLETE updated list — including every unchanged service.",
+          "",
+          "### Core Services",
+          coreLines,
+          "",
+          "### Additional Services",
+          secondaryLines,
+        ].join("\n");
+      }
+
+      let diagramContext = "";
+      if (previousDiagramCode) {
+        diagramContext = [
+          "",
+          "",
+          "## Current Diagram Code",
+          "",
+          "This is the Python code that generated the current architecture diagram. When you call update_architecture, this code will be passed to the diagram generator as a starting point — only the changed nodes and edges need to be added, removed, or replaced.",
+          "",
+          "```python",
+          previousDiagramCode,
+          "```",
+        ].join("\n");
+      }
+
+      const followupSystem = baseSystem + architectureContext + diagramContext;
+
+      // Build full conversation history (same as before)
       const historyMessages = uiMessages
         .map((m, idx) => {
           const text = m.parts
@@ -1105,7 +1422,6 @@ export function runFollowup({
             .map((p) => (p.type === "text" ? p.text : ""))
             .join("\n");
 
-          // For the last user message, include any attached file parts (e.g. PDFs).
           const isLastUserMessage =
             m.role === "user" && idx === uiMessages.length - 1;
 
@@ -1130,11 +1446,352 @@ export function runFollowup({
             : m.content.length > 0,
         );
 
+      // ── Tool: list_service_docs ────────────────────────────────────────
+      const listServiceDocsTool = tool({
+        description:
+          "List available service documentation files for a given cloud provider and optional pillar. " +
+          "Call this to discover which service slugs exist before calling read_service_doc.",
+        inputSchema: z.object({
+          provider: z
+            .enum(["aws", "azure", "gcp"])
+            .describe("The cloud provider to list services for."),
+          pillar: z
+            .enum([
+              "ai_ml",
+              "analytics",
+              "compute",
+              "database",
+              "devops",
+              "integration_messaging",
+              "migration_hybrid",
+              "networking",
+              "other",
+              "security_identity",
+              "storage",
+            ])
+            .optional()
+            .describe(
+              "Narrow results to a specific pillar. Omit to list all pillars for the provider.",
+            ),
+        }),
+        execute: async ({ provider, pillar }) => {
+          const { readdir } = await import("fs/promises");
+          const providerDir = path.join(DATA_DIR, provider);
+
+          if (pillar) {
+            const pillarDir = path.join(providerDir, pillar);
+            try {
+              const files = await readdir(pillarDir);
+              const slugs = files
+                .filter((f) => f.endsWith(".md"))
+                .map((f) => f.replace(/\.md$/, ""))
+                .sort();
+              return { pillar, files: slugs };
+            } catch {
+              return { error: `Pillar '${pillar}' not found for provider '${provider}'.` };
+            }
+          }
+
+          // No pillar specified — list all pillars and their files
+          try {
+            const pillars = await readdir(providerDir);
+            const result: Record<string, string[]> = {};
+            await Promise.all(
+              pillars.map(async (p) => {
+                try {
+                  const files = await readdir(path.join(providerDir, p));
+                  result[p] = files
+                    .filter((f) => f.endsWith(".md"))
+                    .map((f) => f.replace(/\.md$/, ""))
+                    .sort();
+                } catch {
+                  // skip non-directory entries
+                }
+              }),
+            );
+            return { provider, pillars: result };
+          } catch {
+            return { error: `Provider '${provider}' not found.` };
+          }
+        },
+      });
+
+      // ── Tool: read_service_doc ─────────────────────────────────────────
+      const readServiceDocTool = tool({
+        description:
+          "Read a cloud service documentation file from the knowledge base. " +
+          "Use this to learn about a specific service before recommending it or comparing alternatives. " +
+          "Path must be relative to the data/ directory, e.g. 'aws/compute/lambda.md'.",
+        inputSchema: z.object({
+          path: z
+            .string()
+            .describe(
+              "Relative path within data/, e.g. 'aws/compute/lambda.md' or 'gcp/database/cloud-spanner.md'",
+            ),
+        }),
+        execute: async ({ path: relPath }) => {
+          // Security: only allow reading from provider service directories
+          const normalised = path.normalize(relPath).replace(/\\/g, "/");
+          const parts = normalised.split("/");
+          if (
+            parts.length < 2 ||
+            !ALLOWED_PROVIDER_DIRS.includes(
+              parts[0] as (typeof ALLOWED_PROVIDER_DIRS)[number],
+            ) ||
+            normalised.includes("..")
+          ) {
+            return {
+              error: `Invalid path '${relPath}'. Must be under aws/, azure/, or gcp/ and not traverse upward.`,
+            };
+          }
+
+          const absolutePath = path.join(DATA_DIR, normalised);
+          try {
+            const content = await readFile(absolutePath, "utf-8");
+            return { content };
+          } catch {
+            return {
+              error: `File not found: ${relPath}. Check the provider, pillar, and service slug.`,
+            };
+          }
+        },
+      });
+
+      // ── Tool: update_architecture ──────────────────────────────────────
+      // This tool accepts the model's proposed updated services list and
+      // triggers diagram re-generation + services panel update in parallel,
+      // emitting data parts into the stream as they complete.
+      const updateArchitectureTool = tool({
+        description:
+          "Update the diagram and services panel with a modified architecture. " +
+          "Call this when the user explicitly requests a service change or architectural modification. " +
+          "Provide the COMPLETE updated services list (not just the changed items) and a short description of the updated architecture for diagram generation.",
+        inputSchema: FollowupUpdateSchema,
+        execute: async ({ coreServices, secondaryServices, synthesisContext }) => {
+          // Emit generating state for both panels immediately
+          writer.write({
+            type: "data-archon-diagram",
+            id: "phase-diagram",
+            data: { state: "generating" },
+          });
+          writer.write({
+            type: "data-archon-services",
+            id: "phase-services",
+            data: { state: "generating" },
+          });
+
+          const diagramOutputDir =
+            process.env.DIAGRAM_OUTPUT_DIR ?? "/tmp/archon-diagrams";
+          const { mkdir } = await import("fs/promises");
+          await mkdir(diagramOutputDir, { recursive: true }).catch(() => {});
+
+          // Helper to extract text from MCP tool output
+          function extractTextFromOutput(output: unknown): string {
+            if (!output || typeof output !== "object")
+              return String(output ?? "");
+            const o = output as Record<string, unknown>;
+            if (Array.isArray(o.content)) {
+              return (o.content as unknown[])
+                .filter(
+                  (item): item is { type: string; text: string } =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    (item as Record<string, unknown>).type === "text" &&
+                    typeof (item as Record<string, unknown>).text === "string",
+                )
+                .map((item) => item.text)
+                .join("\n");
+            }
+            if (o.type === "content" && Array.isArray(o.value)) {
+              return (o.value as unknown[])
+                .filter(
+                  (item): item is { type: string; text: string } =>
+                    typeof item === "object" &&
+                    item !== null &&
+                    (item as Record<string, unknown>).type === "text" &&
+                    typeof (item as Record<string, unknown>).text === "string",
+                )
+                .map((item) => item.text)
+                .join("\n");
+            }
+            if (o.type === "json") return JSON.stringify(o.value);
+            return JSON.stringify(o);
+          }
+
+          // ── Step 1: Build and emit services (normalise pillar labels) ──────
+          const coreCards: ServiceCard[] = coreServices.map((s, i) => ({
+            tier: "core" as const,
+            provider: s.provider,
+            serviceName: s.serviceName,
+            pillarLabel: normalisePillarLabel(s.pillarLabel),
+            coreTag: s.coreTag ?? null,
+            description: s.description,
+            sortOrder: i,
+          }));
+
+          const secondaryCards: ServiceCard[] = secondaryServices.map(
+            (s, i) => ({
+              tier: "secondary" as const,
+              provider: s.provider,
+              serviceName: s.serviceName,
+              pillarLabel: normalisePillarLabel(s.pillarLabel),
+              description: s.description,
+              sortOrder: i,
+            }),
+          );
+
+          writer.write({
+            type: "data-archon-services",
+            id: "phase-services",
+            data: {
+              state: "complete",
+              coreServices: coreCards,
+              secondaryServices: secondaryCards,
+            },
+          });
+
+          if (onPersistServices) {
+            await onPersistServices([...coreCards, ...secondaryCards]);
+          }
+
+          // ── Step 2: Build rich diagram prompt from finalized service list ──
+          const coreServicesList = coreCards
+            .map(
+              (s) =>
+                `- ${s.serviceName} (${s.provider}, ${s.pillarLabel}): ${s.description}`,
+            )
+            .join("\n");
+          const secondaryServicesList = secondaryCards
+            .map(
+              (s) =>
+                `- ${s.serviceName} (${s.provider}, ${s.pillarLabel}): ${s.description}`,
+            )
+            .join("\n");
+
+          const diagramPrompt = previousDiagramCode
+            ? [
+                "## Previous Diagram Code",
+                "The following Python code generated the current diagram. Modify it to reflect the service changes below — preserve the overall structure, layout direction, and cluster names. Only add, remove, or replace nodes and edges for services that changed.",
+                "",
+                "```python",
+                previousDiagramCode,
+                "```",
+                "",
+                "## Updated Service List",
+                "Apply the following service changes to the diagram code above:",
+                "",
+                "### Core Services",
+                coreServicesList,
+                "",
+                "### Additional Services",
+                secondaryServicesList,
+              ].join("\n")
+            : [
+                synthesisContext,
+                "",
+                "## Core Services",
+                coreServicesList,
+                "",
+                "## Additional Services",
+                secondaryServicesList,
+              ].join("\n");
+
+          // ── Step 3: Diagram re-generation via MCP (sequential) ────────────
+          const mcpClient = await createDiagramMCPClient();
+          try {
+            const mcpTools = await mcpClient.tools();
+            const diagramGenResult = await generateText({
+              model: makeModel(),
+              providerOptions: agentProviderOptions,
+              tools: mcpTools,
+              stopWhen: stepCountIs(5),
+              system: buildFollowupDiagramSystem(diagramOutputDir),
+              prompt: diagramPrompt,
+              abortSignal,
+            });
+
+            let imagePath: string | undefined;
+            let diagramCode: string | undefined;
+            let lastGenerateError: string | undefined;
+            for (const step of diagramGenResult.steps) {
+              // Capture Python code from the tool call input
+              for (const call of step.toolCalls ?? []) {
+                if (
+                  !("toolName" in call) ||
+                  call.toolName !== "generate_diagram"
+                )
+                  continue;
+                const inp = (call as { input?: unknown }).input as
+                  | Record<string, unknown>
+                  | undefined;
+                if (inp && typeof inp.code === "string") diagramCode = inp.code;
+              }
+              for (const toolResult of step.toolResults ?? []) {
+                if (
+                  !("toolName" in toolResult) ||
+                  toolResult.toolName !== "generate_diagram"
+                )
+                  continue;
+                const text = extractTextFromOutput(toolResult.output);
+                const match = text.match(/PNG diagram:\s*(.+\.png)/i);
+                if (match) {
+                  imagePath = match[1].trim();
+                } else {
+                  lastGenerateError =
+                    text.replace(/^Error:\s*/i, "").trim() ||
+                    "generate_diagram returned no output";
+                }
+              }
+            }
+
+            if (imagePath) {
+              writer.write({
+                type: "data-archon-diagram",
+                id: "phase-diagram",
+                data: { state: "complete", imagePath, diagramCode },
+              });
+            } else {
+              writer.write({
+                type: "data-archon-diagram",
+                id: "phase-diagram",
+                data: {
+                  state: "error",
+                  error: lastGenerateError
+                    ? `Diagram generation failed: ${lastGenerateError}`
+                    : "generate_diagram was not called or returned no output",
+                },
+              });
+            }
+          } catch (err) {
+            writer.write({
+              type: "data-archon-diagram",
+              id: "phase-diagram",
+              data: {
+                state: "error",
+                error:
+                  err instanceof Error ? err.message : String(err),
+              },
+            });
+          } finally {
+            await mcpClient.close();
+          }
+
+          return { success: true };
+        },
+      });
+
+      // ── Run the followup agent with tools ─────────────────────────────
       const result = streamText({
         model: makeModel(),
         providerOptions: agentProviderOptions,
         system: followupSystem,
         messages: historyMessages,
+        tools: {
+          list_service_docs: listServiceDocsTool,
+          read_service_doc: readServiceDocTool,
+          update_architecture: updateArchitectureTool,
+        },
+        stopWhen: stepCountIs(10),
         abortSignal,
       });
 
