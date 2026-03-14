@@ -21,6 +21,7 @@ These rules are NON-NEGOTIABLE. Violating any of them is a pipeline failure.
 4. **Do NOT output the final JSON until you have received the result from \`read_files\`.** Your output step is always last.
 5. **Your final response MUST be ONLY the raw JSON object** — no markdown fences, no preamble, no explanation.
 6. You can select UP TO 6 patterns. No more.
+7. DO NOT hallucinate patterns. Choose ONLY FROM THE ONES PROVIDED.
 
 ---
 
@@ -42,7 +43,7 @@ Call \`read_files\` ONCE with the array of ALL selected pattern detail file path
 
 **Step 3 — Output (only after read_files result is received)**
 
-Produce the final JSON. The \`implied_pillars\` list MUST be the union of all "Implied Pillars" sections from the files returned in Step 2. Do NOT add pillars not present in those sections.
+Produce the final JSON. The \`implied_pillars\` list MUST be the union of all "Implied Pillars" sections from the files returned in Step 2. Do NOT add pillars not present in those sections. The only pillar you can add at your own discretion is \`other\`, ONLY when the app needs one of the following (usually in very rare occasions): Internet of Things (IoT), Communications & Contact Centers, Mapping & Location Services, End-User Computing (VDI), Blockchain & Web3. Again, only add the "other" pillar in extremely specific scenarios that need it.
 
 Your final response must be this JSON object with both fields populated:
 

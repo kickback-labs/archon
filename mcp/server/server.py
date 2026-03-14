@@ -28,6 +28,26 @@ WORKFLOW — follow in order:
 2. list_icons — call with provider_filter to get the exact icon class names available. Never guess.
 3. generate_diagram — write and submit the diagram code.
 
+ICON USAGE — provider-prefixed aliases (CRITICAL):
+The runtime does NOT use wildcard imports. Every provider module is available as a prefixed alias:
+  aws_compute, aws_storage, aws_database, aws_network, aws_analytics, aws_integration, aws_ml, aws_iot, aws_security, aws_devtools, aws_management, aws_migration, aws_mobile, aws_media, aws_general, aws_cost, aws_ar, aws_game, aws_enablement, aws_engagement, aws_quantum, aws_robotics, aws_satellite, aws_enduser, aws_blockchain, aws_business
+  gcp_compute, gcp_storage, gcp_database, gcp_network, gcp_analytics, gcp_ml, gcp_devtools, gcp_operations, gcp_iot, gcp_api, gcp_security, gcp_migration
+  azure_compute, azure_storage, azure_database, azure_network, azure_web, azure_analytics, azure_integration, azure_devops, azure_ml, azure_iot, azure_general, azure_mobile, azure_security, azure_identity, azure_migration
+  k8s_compute, k8s_storage, k8s_network, k8s_rbac, k8s_infra, k8s_ecosystem, k8s_podconfig, k8s_controlplane, k8s_clusterconfig, k8s_chaos, k8s_others, k8s_group
+  onprem_compute, onprem_database, onprem_network, onprem_storage, onprem_messaging, onprem_queue, onprem_monitoring, onprem_inmemory, onprem_analytics, onprem_client, onprem_container, onprem_ci, onprem_cd, onprem_vcs, onprem_iac, onprem_gitops, onprem_registry, onprem_security, onprem_identity, onprem_dns, onprem_etl, onprem_workflow, onprem_tracing, onprem_mlops, onprem_certificates, onprem_auth, onprem_aggregator, onprem_logging, onprem_groupware, onprem_proxmox, onprem_search
+  generic_compute, generic_storage, generic_database, generic_network, generic_os, generic_device, generic_place, generic_virtualization, generic_blank
+  saas_crm, saas_identity, saas_chat, saas_recommendation, saas_cdn, saas_communication, saas_media, saas_logging, saas_security, saas_social, saas_alerting, saas_analytics, saas_automation, saas_filesharing
+  elastic_agent, elastic_beats, elastic_elasticsearch, elastic_enterprisesearch, elastic_observability, elastic_orchestration, elastic_saas, elastic_security
+  programming_flowchart, programming_framework, programming_language, programming_runtime
+  gis_cli, gis_cplusplus, gis_data, gis_database, gis_desktop, gis_format, gis_geocoding, gis_java, gis_javascript, gis_mobile, gis_ogc, gis_organization, gis_python, gis_routing, gis_server
+
+Always use the alias to qualify the class. Examples:
+  aws_compute.EC2(...)        NOT  EC2(...)
+  gcp_storage.Storage(...)    NOT  Storage(...)
+  azure_storage.BlobStorage(...) NOT BlobStorage(...)
+  onprem_client.Users(...)    NOT  Users(...)
+Use list_icons to find exact class names, then prefix them with the correct alias.
+
 DIAGRAM DESIGN PRINCIPLES:
 Good diagrams are immediately readable. Follow these rules strictly:
 
@@ -35,10 +55,10 @@ Good diagrams are immediately readable. Follow these rules strictly:
 - SIZE: Target 8–12 nodes. Hard limit of 15 nodes. When in doubt, cut — fewer nodes makes a better diagram.
 - LAYOUT: Always use direction="LR" (left-to-right). Do not use "TB".
 - CLUSTERS: Organize nodes into named architectural layers — use standard layer names where they apply: "Edge", "Network Layer", "Application Layer" / "Compute Layer", "Data Layer", "Messaging Layer", "Storage Layer". Only create a cluster when 2+ nodes belong to the same layer. Do not nest more than 2 cluster levels. Use invisible edges (Edge(style="invis")) between clusters or nodes to enforce left-to-right column ordering.
-- CONNECTIONS: Connect layers to layers, not individual nodes to everything. The canonical flow is: Users → Edge cluster → Network cluster → Application/Compute cluster → Data/Storage cluster. Draw one representative arrow per layer-to-layer handoff. Never fan out edges from a single node to nodes in multiple unrelated layers. No edge labels — do not use Edge(label=...) under any circumstances. Use Edge(style="dashed") only for async or background flows between layers. Do NOT draw edges between nodes that belong to the same cluster (same layer) unless there is an explicit intra-layer flow such as primary→replica replication.
-- NODE LABELS: Every node must have a two-line label: line 1 is the service name, line 2 is a short description of its role. Keep each line under ~25 characters. Use \\n to separate them. Example: LoadBalancing("Global HTTP LB\\nSingle entry point").
-- GRAPH ATTRS: Always set graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"} on the Diagram for clean arrow routing.
-- USERS: Always represent end users with Users (diagrams.onprem.client.Users).
+- CONNECTIONS: Follow the Diagrams docs "Merged Edges" approach when several arrows converge on the same downstream service or layer. Use Graphviz edge concentration rather than leaving parallel edges in place: set graph_attr with concentrate="true" and splines="spline", keep the default dot engine, and when helpful use a tiny junction node plus shared headports/minlen so the edges visibly merge before the destination. Connect layers to layers, not individual nodes to everything. The canonical flow is: Users → Edge cluster → Network cluster → Application/Compute cluster → Data/Storage cluster. Draw one representative arrow per layer-to-layer handoff. Never fan out edges from a single node to nodes in multiple unrelated layers, and never draw several parallel arrows that all terminate on the same service when one merged path would express the same relationship. No edge labels — do not use Edge(label=...) under any circumstances. Do NOT draw edges between nodes that belong to the same cluster (same layer) unless there is an explicit intra-layer flow such as primary→replica replication.
+- NODE LABELS: Every node must have a two-line label: line 1 is the service name, line 2 is a short description of its role. Keep each line under ~25 characters. Use \\n to separate them. Example: gcp_network.LoadBalancing("Global HTTP LB\\nSingle entry point").
+- GRAPH ATTRS: Always set graph_attr={"splines": "spline", "concentrate": "true", "ranksep": "2.0", "nodesep": "0.8"} on the Diagram so compatible edges can merge cleanly. This only works with the default dot engine.
+- USERS: Always represent end users with onprem_client.Users(...).
 
 WHAT TO EXCLUDE BY DEFAULT:
 - CloudWatch, logging, monitoring nodes
@@ -47,9 +67,9 @@ WHAT TO EXCLUDE BY DEFAULT:
 - Cross-region replication unless it is the core topic
 
 PROVIDER CONSISTENCY:
-- For single-provider architectures (e.g. AWS-only), every icon MUST come from that provider's namespace (diagrams.aws.*). Do NOT accidentally include icons from other providers — if a service has no icon in the target provider, omit the node.
-- For explicitly multi-cloud architectures, you may intentionally mix provider namespaces. In that case call list_icons once per provider used, and group each provider's nodes inside a clearly labelled cluster (e.g. "AWS Region", "Azure Services", "GCP Project").
-- The ONLY always-permitted cross-provider node is Users (diagrams.onprem.client.Users).
+- For single-provider architectures (e.g. AWS-only), every icon MUST come from that provider's aliases (aws_*). Do NOT accidentally use icons from other provider aliases — if a service has no icon in the target provider, omit the node.
+- For explicitly multi-cloud architectures, you may intentionally mix provider aliases. In that case call list_icons once per provider used, and group each provider's nodes inside a clearly labelled cluster (e.g. "AWS Region", "Azure Services", "GCP Project").
+- The ONLY always-permitted cross-provider node is onprem_client.Users(...).
 
 SUPPORTED PROVIDERS: AWS, GCP, Azure, Kubernetes, on-prem, hybrid, multi-cloud, SaaS.""",
 )
@@ -81,27 +101,71 @@ async def mcp_generate_diagram(
 
     RULES:
     - Never write import statements. The runtime pre-imports everything. Start directly with: with Diagram(
+    - ALWAYS qualify every icon class with its provider-prefixed module alias. Never use bare class names.
+      Correct:   aws_compute.EC2(...)   gcp_storage.Storage(...)   onprem_client.Users(...)
+      Wrong:     EC2(...)               Storage(...)                Users(...)
     - Only use icon class names confirmed by list_icons. Do not guess or invent names.
-    - Always use Users (diagrams.onprem.client) to represent end users.
+    - Always use onprem_client.Users(...) to represent end users.
     - Do not name any variable "os" — it shadows the built-in used by the runtime.
     - Do not use parentheses inside diagram title strings.
+
+    AVAILABLE ALIASES (module → alias):
+      diagrams.aws.*      → aws_compute, aws_storage, aws_database, aws_network, aws_analytics,
+                            aws_integration, aws_ml, aws_iot, aws_security, aws_devtools,
+                            aws_management, aws_migration, aws_mobile, aws_media, aws_general,
+                            aws_cost, aws_ar, aws_game, aws_enablement, aws_engagement,
+                            aws_quantum, aws_robotics, aws_satellite, aws_enduser,
+                            aws_blockchain, aws_business
+      diagrams.gcp.*      → gcp_compute, gcp_storage, gcp_database, gcp_network, gcp_analytics,
+                            gcp_ml, gcp_devtools, gcp_operations, gcp_iot, gcp_api,
+                            gcp_security, gcp_migration
+      diagrams.azure.*    → azure_compute, azure_storage, azure_database, azure_network,
+                            azure_web, azure_analytics, azure_integration, azure_devops,
+                            azure_ml, azure_iot, azure_general, azure_mobile, azure_security,
+                            azure_identity, azure_migration
+      diagrams.k8s.*      → k8s_compute, k8s_storage, k8s_network, k8s_rbac, k8s_infra,
+                            k8s_ecosystem, k8s_podconfig, k8s_controlplane, k8s_clusterconfig,
+                            k8s_chaos, k8s_others, k8s_group
+      diagrams.onprem.*   → onprem_compute, onprem_database, onprem_network, onprem_storage,
+                            onprem_messaging, onprem_queue, onprem_monitoring, onprem_inmemory,
+                            onprem_analytics, onprem_client, onprem_container, onprem_ci,
+                            onprem_cd, onprem_vcs, onprem_iac, onprem_gitops, onprem_registry,
+                            onprem_security, onprem_identity, onprem_dns, onprem_etl,
+                            onprem_workflow, onprem_tracing, onprem_mlops, onprem_certificates,
+                            onprem_auth, onprem_aggregator, onprem_logging, onprem_groupware,
+                            onprem_proxmox, onprem_search
+      diagrams.generic.*  → generic_compute, generic_storage, generic_database, generic_network,
+                            generic_os, generic_device, generic_place, generic_virtualization,
+                            generic_blank
+      diagrams.saas.*     → saas_crm, saas_identity, saas_chat, saas_recommendation, saas_cdn,
+                            saas_communication, saas_media, saas_logging, saas_security,
+                            saas_social, saas_alerting, saas_analytics, saas_automation,
+                            saas_filesharing
+      diagrams.elastic.*  → elastic_agent, elastic_beats, elastic_elasticsearch,
+                            elastic_enterprisesearch, elastic_observability, elastic_orchestration,
+                            elastic_saas, elastic_security
+      diagrams.programming.* → programming_flowchart, programming_framework,
+                               programming_language, programming_runtime
+      diagrams.gis.*      → gis_cli, gis_cplusplus, gis_data, gis_database, gis_desktop,
+                            gis_format, gis_geocoding, gis_java, gis_javascript, gis_mobile,
+                            gis_ogc, gis_organization, gis_python, gis_routing, gis_server
 
     DIAGRAM DESIGN — keep it clean and readable:
     - TARGET 8–12 nodes. Hard limit: 15 nodes. Strip anything that isn't core to the data path.
     - Always use direction="LR" (left-to-right). Do not use "TB".
-    - Always set graph_attr={"splines": "polyline", "ranksep": "2.0", "nodesep": "0.8"} for clean routing.
+    - Always set graph_attr={"splines": "spline", "concentrate": "true", "ranksep": "2.0", "nodesep": "0.8"} so compatible edges can merge cleanly. This only works with the default dot engine.
     - Group related nodes into Clusters using standard architectural layer names: "Edge", "Network Layer", "Application Layer" / "Compute Layer", "Data Layer", "Messaging Layer", "Storage Layer". Only create a cluster when 2+ nodes belong to it. Max 2 nesting levels.
     - Use invisible edges (Edge(style="invis")) between clusters or nodes to enforce left-to-right column ordering.
-    - Draw only meaningful data/control flow arrows between layers, not between individual nodes at random. Canonical flow: Users → Edge → Network → Application/Compute → Data/Storage. One representative arrow per layer-to-layer handoff. Never fan out from a single node to nodes in multiple unrelated layers. Never draw edges between nodes in the same cluster unless there is an explicit intra-layer flow (e.g. DB primary→replica). Never add labels to edges — do not use Edge(label=...).
+    - Draw only meaningful data/control flow arrows between layers, not between individual nodes at random. Follow the Diagrams docs "Merged Edges" pattern: if several upstream nodes connect to the same downstream node or layer, configure compatible merged edges with concentrate="true" and splines="spline"; when helpful, use a tiny plaintext junction node and shared headports/minlen so the arrows merge before the destination. Canonical flow: Users → Edge → Network → Application/Compute → Data/Storage. One representative arrow per layer-to-layer handoff. Never fan out from a single node to nodes in multiple unrelated layers. Never leave several parallel edges that all end on the same service when they can be merged into one shared path. Never draw edges between nodes in the same cluster unless there is an explicit intra-layer flow (e.g. DB primary→replica). Never add labels to edges — do not use Edge(label=...).
     - Use Edge(style="dashed") only for async or background flows between layers.
     - Omit monitoring, logging, IAM, and CI/CD nodes unless the user explicitly asks for them.
-    - PROVIDER CONSISTENCY: For single-provider architectures, every icon must come from that provider's namespace — do not accidentally include icons from other providers. For explicitly multi-cloud architectures, you may mix namespaces intentionally; call list_icons once per provider and group each provider's nodes in a labelled cluster. The only always-permitted cross-provider node is Users (diagrams.onprem.client.Users).
-    - Every node label must be two lines: line 1 = service name (~25 chars max), line 2 = short role description (~25 chars max). Use \\n to separate. Example: Run("Cloud Run\\nHandle API requests").
+    - PROVIDER CONSISTENCY: For single-provider architectures, every icon must come from that provider's aliases (e.g. aws_*) — do not accidentally use icons from other provider aliases. For explicitly multi-cloud architectures, you may mix aliases intentionally; call list_icons once per provider and group each provider's nodes in a labelled cluster. The only always-permitted cross-provider node is onprem_client.Users(...).
+    - Every node label must be two lines: line 1 = service name (~25 chars max), line 2 = short role description (~25 chars max). Use \\n to separate. Example: gcp_compute.Run("Cloud Run\\nHandle API requests").
 
     COMMON PATTERNS:
     - Linear flow:   user >> gateway >> service >> database
     - Branching:     service >> [worker1, worker2, worker3]
-    - Grouping:      with Cluster("Data Layer"): db = RDS("Orders DB\\nStore order records")
+    - Grouping:      with Cluster("Data Layer"): db = aws_database.RDS("Orders DB\\nStore order records")
     - Async edge:    service >> Edge(style="dashed") >> queue
     - Column order:  clusterA_node >> Edge(style="invis") >> clusterB_node
     """
