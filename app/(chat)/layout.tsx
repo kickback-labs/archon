@@ -20,7 +20,7 @@ export default async function ChatLayout({
       <div className="flex flex-1 flex-col overflow-hidden">
         <header className="flex h-10 shrink-0 items-center gap-2 border-b px-3 md:hidden">
           <SidebarTrigger />
-          <Separator orientation="vertical" className="h-4" />
+          <Separator orientation="vertical" className="h-10" />
           <div className="size-6 shrink-0 overflow-hidden rounded-full">
             <Image
               src="/archon-logo.png"
@@ -30,11 +30,11 @@ export default async function ChatLayout({
               className="size-6 scale-[2.75] object-contain"
             />
           </div>
-          <span className="text-sm font-semibold">Archon</span>
+          <span className="font-serif text-sm font-medium tracking-tight">
+            Archon
+          </span>
         </header>
-        <main className="flex flex-1 flex-col overflow-hidden">
-          {children}
-        </main>
+        <main className="flex flex-1 flex-col overflow-hidden">{children}</main>
       </div>
     </SidebarProvider>
   );

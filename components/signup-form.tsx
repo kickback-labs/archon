@@ -58,7 +58,7 @@ export function SignupForm({
     >
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl font-bold">Create your account</h1>
+          <h1 className="font-serif text-2xl font-medium tracking-tight">Create your account</h1>
           <p className="text-sm text-balance text-muted-foreground">
             Fill in the form below to create your account
           </p>

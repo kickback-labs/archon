@@ -113,25 +113,26 @@ export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader className="px-4 py-4">
-        <div className="flex items-center gap-2">
-          <div className="size-7 shrink-0 overflow-hidden rounded-full">
+        <div className="flex items-center gap-2.5">
+          <div className="size-8 shrink-0 overflow-hidden rounded-full">
             <Image
               src="/archon-logo.png"
               alt="Archon"
               width={96}
               height={96}
-              className="size-7 scale-[2.75] object-contain"
+              className="size-8 scale-[2.75] object-contain"
             />
           </div>
-          <span className="text-sm font-semibold">Archon</span>
-          <p className="ml-0.5 text-xs text-muted-foreground">Cloud AI</p>
+          <span className="font-serif text-base font-medium tracking-tight">
+            Archon
+          </span>
         </div>
       </SidebarHeader>
 
-      <SidebarSeparator />
+      <SidebarSeparator className={"-ml-1"} />
 
       {/* New chat — outside SidebarContent so it stays pinned above the scroll */}
-      <SidebarGroup className="py-1">
+      <SidebarGroup className="py-1 mt-1">
         <SidebarGroupContent>
           <SidebarMenu>
             <SidebarMenuItem>
@@ -153,7 +154,7 @@ export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
           <SidebarGroupContent>
             <SidebarMenu>
               {chats.length === 0 ? (
-                <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+                <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                   No conversations yet
                 </p>
               ) : (
@@ -165,8 +166,10 @@ export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
                       <SidebarMenuButton
                         render={<Link href={`/chat/${chat.id}`} />}
                         isActive={isActive}
-                        size="sm"
-                        className={cn(isOptimistic && "opacity-60")}
+                        className={cn(
+                          "text-[13px]",
+                          isOptimistic && "opacity-60",
+                        )}
                         title={chat.title}
                       >
                         <span className="truncate">{chat.title}</span>
@@ -192,11 +195,11 @@ export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
 
       <SidebarSeparator />
 
-      <SidebarFooter className="px-3 py-3 gap-0.5">
+      <SidebarFooter className="px-3 py-3 gap-1">
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left cursor-default select-none outline-none">
-            <SunIcon className="size-3.5 shrink-0 dark:hidden" />
-            <MoonIcon className="size-3.5 shrink-0 hidden dark:block" />
+          <DropdownMenuTrigger className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left cursor-default select-none outline-none">
+            <SunIcon className="size-4 shrink-0 dark:hidden" />
+            <MoonIcon className="size-4 shrink-0 hidden dark:block" />
             Theme
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top">
@@ -218,17 +221,18 @@ export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
         <Link
           href="/settings"
           className={cn(
-            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left select-none",
-            pathname === "/settings" && "bg-sidebar-accent text-sidebar-accent-foreground",
+            "flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left select-none",
+            pathname === "/settings" &&
+              "bg-sidebar-accent text-sidebar-accent-foreground",
           )}
         >
-          <SettingsIcon className="size-3.5 shrink-0" />
+          <SettingsIcon className="size-4 shrink-0" />
           Settings
         </Link>
 
         {user ? (
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center rounded-md px-2 py-1.5 text-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left cursor-default select-none outline-none">
+            <DropdownMenuTrigger className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-left cursor-default select-none outline-none">
               <span className="truncate">{user.name}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top">
@@ -245,7 +249,7 @@ export function ChatSidebar({ chats: initialChats, user }: ChatSidebarProps) {
         ) : (
           <Link
             href="/login"
-            className="block px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            className="block px-2 py-2 text-sm text-muted-foreground hover:text-foreground"
           >
             Login
           </Link>

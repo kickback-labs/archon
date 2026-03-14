@@ -80,6 +80,7 @@ import {
   useEffect,
 } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "motion/react";
 
 // ─── Pillar metadata ──────────────────────────────────────────────────────────
 
@@ -757,11 +758,60 @@ export function Chat({
       <Conversation>
         <ConversationContent>
           {messages.length === 0 ? (
-            <ConversationEmptyState
-              icon={<BotIcon className="size-12 text-muted-foreground" />}
-              title="How can I help you?"
-              description="Describe a system you want to build and I'll design a cloud architecture for it."
-            />
+            <ConversationEmptyState>
+              <motion.div
+                className="flex flex-col items-center gap-6"
+                initial="hidden"
+                animate="visible"
+                variants={{
+                  hidden: {},
+                  visible: { transition: { staggerChildren: 0.1 } },
+                }}
+              >
+                <motion.p
+                  className="text-lg text-foreground font-serif"
+                  variants={{
+                    hidden: { opacity: 0 },
+                    visible: { opacity: 1, transition: { duration: 0.4 } },
+                  }}
+                >
+                  What would you like to build?
+                </motion.p>
+                <motion.div
+                  className="flex flex-col gap-2 w-full max-w-md"
+                  variants={{
+                    hidden: {},
+                    visible: { transition: { staggerChildren: 0.08 } },
+                  }}
+                >
+                  {[
+                    "Create a food delivery app like Uber Eats on AWS",
+                    "Create a collaborative document editor like Notion on Azure",
+                    "Create a real-time chat app like Slack on GCP",
+                  ].map((suggestion) => (
+                    <motion.button
+                      key={suggestion}
+                      type="button"
+                      className="cursor-pointer rounded-lg border border-border/60 px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                      variants={{
+                        hidden: { opacity: 0, y: 8 },
+                        visible: {
+                          opacity: 1,
+                          y: 0,
+                          transition: { duration: 0.35 },
+                        },
+                      }}
+                      onClick={() => {
+                        sendMessage({ text: suggestion });
+                        setText("");
+                      }}
+                    >
+                      {suggestion}
+                    </motion.button>
+                  ))}
+                </motion.div>
+              </motion.div>
+            </ConversationEmptyState>
           ) : (
             <>
               {(() => {

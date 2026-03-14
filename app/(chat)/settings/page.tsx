@@ -35,6 +35,10 @@ const COMPLIANCE_OPTIONS = [
   "ISO 27001",
 ] as const;
 
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -105,7 +109,7 @@ export default function SettingsPage() {
           Back
         </button>
 
-        <h1 className="text-2xl font-bold">Settings</h1>
+        <h1 className="font-serif text-2xl font-medium tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Configure your cloud environment preferences. These are used to tailor
           architecture recommendations.
@@ -123,12 +127,14 @@ export default function SettingsPage() {
               </FieldDescription>
               <Select value={scale} onValueChange={(v) => v && setScale(v)}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select scale" />
+                  <SelectValue placeholder="Select scale">
+                    {(value) => (value ? capitalize(value) : undefined)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {SCALE_OPTIONS.map((opt) => (
                     <SelectItem key={opt} value={opt}>
-                      {opt}
+                      {capitalize(opt)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -143,12 +149,14 @@ export default function SettingsPage() {
               </FieldDescription>
               <Select value={cloudExpertise} onValueChange={(v) => v && setCloudExpertise(v)}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select expertise" />
+                  <SelectValue placeholder="Select expertise">
+                    {(value) => (value ? capitalize(value) : undefined)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {EXPERTISE_OPTIONS.map((opt) => (
                     <SelectItem key={opt} value={opt}>
-                      {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                      {capitalize(opt)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -163,12 +171,14 @@ export default function SettingsPage() {
               </FieldDescription>
               <Select value={budget} onValueChange={(v) => v && setBudget(v)}>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select budget" />
+                  <SelectValue placeholder="Select budget">
+                    {(value) => (value ? capitalize(value) : undefined)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {BUDGET_OPTIONS.map((opt) => (
                     <SelectItem key={opt} value={opt}>
-                      {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                      {capitalize(opt)}
                     </SelectItem>
                   ))}
                 </SelectContent>

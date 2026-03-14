@@ -14,7 +14,7 @@ const PROVIDER_TEXT: Record<string, string> = {
 function ProviderLabel({ provider }: { provider: string }) {
   const cls = PROVIDER_TEXT[provider] ?? "text-muted-foreground/50";
   return (
-    <span className={`text-[11px] font-medium ${cls}`}>{provider}</span>
+    <span className={`text-[12px] font-medium ${cls}`}>{provider}</span>
   );
 }
 
@@ -24,22 +24,25 @@ function CoreServiceItem({ service }: { service: ServiceCard }) {
   return (
     <div className="px-3 py-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[15px] font-medium leading-snug text-foreground">
+        <span className="text-base font-medium leading-snug text-foreground">
           {service.serviceName}
         </span>
         <ProviderLabel provider={service.provider} />
       </div>
       <div className="mt-0.5 flex items-center gap-2">
-        <span className="text-[12px] text-muted-foreground">
-          {service.pillarLabel}
-        </span>
         {service.coreTag && (
-          <span className="text-[11px] text-muted-foreground/60">
-            · {service.coreTag}
+          <span className="text-[12px] font-medium text-muted-foreground">
+            {service.coreTag}
           </span>
         )}
+        {service.coreTag && (
+          <span className="text-muted-foreground/30">·</span>
+        )}
+        <span className="text-[11px] text-muted-foreground/45">
+          {service.pillarLabel}
+        </span>
       </div>
-      <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground/80">
+      <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
         {service.description}
       </p>
     </div>
@@ -52,12 +55,12 @@ function SecondaryServiceItem({ service }: { service: ServiceCard }) {
   return (
     <div className="px-3 py-3">
       <div className="flex items-center justify-between gap-1">
-        <span className="text-[13px] font-medium text-foreground">
+        <span className="text-sm font-medium text-foreground">
           {service.serviceName}
         </span>
         <ProviderLabel provider={service.provider} />
       </div>
-      <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/70">
+      <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground/80">
         {service.description}
       </p>
     </div>
@@ -112,7 +115,7 @@ function SecondaryServiceList({ services }: { services: ServiceCard[] }) {
 
 function SectionLabel({ title }: { title: string }) {
   return (
-    <p className="px-3 text-[14px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+    <p className="px-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground/70">
       {title}
     </p>
   );
@@ -136,7 +139,7 @@ export function ServicesPanel({ services }: ServicesPanelProps) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin opacity-50" />
-        <p className="text-[11px] tracking-wide opacity-50">Analysing services…</p>
+        <p className="text-xs tracking-wide opacity-50">Analysing services…</p>
       </div>
     );
   }
@@ -144,7 +147,7 @@ export function ServicesPanel({ services }: ServicesPanelProps) {
   if (services.state === "error") {
     return (
       <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
-        <p className="text-[11px] opacity-50">Services data unavailable</p>
+        <p className="text-xs opacity-50">Services data unavailable</p>
       </div>
     );
   }
@@ -156,7 +159,7 @@ export function ServicesPanel({ services }: ServicesPanelProps) {
   if (!hasCore && !hasSecondary) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
-        <p className="text-[11px] opacity-50">No services data</p>
+        <p className="text-xs opacity-50">No services data</p>
       </div>
     );
   }
