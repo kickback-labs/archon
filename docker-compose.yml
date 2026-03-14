@@ -43,6 +43,7 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
+      HOSTNAME: "0.0.0.0"
       MCP_SERVER_URL: "http://mcp:8000/mcp"
       DIAGRAM_OUTPUT_DIR: "/tmp/archon-diagrams"
       DATABASE_URL: "postgresql://archon:archon@postgres:5432/archon"
