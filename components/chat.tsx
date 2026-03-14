@@ -34,12 +34,6 @@ import {
   Attachments,
 } from "@/components/ai-elements/attachments";
 import {
-  ChainOfThought,
-  ChainOfThoughtContent,
-  ChainOfThoughtHeader,
-  ChainOfThoughtStep,
-} from "@/components/ai-elements/chain-of-thought";
-import {
   Task,
   TaskContent,
   TaskTrigger,
@@ -141,314 +135,197 @@ const AttachmentsDisplay = () => {
   );
 };
 
-// ─── Requirements phase renderer ─────────────────────────────────────────────
+// ─── Pipeline phase types & helpers ──────────────────────────────────────────
 
-function RequirementsPart({ data }: { data: RequirementsData }) {
-  const isStreaming = data.state === "streaming";
-  const isComplete = data.state === "complete";
+/** All data-archon-* types that belong to the main pipeline analysis. */
+const PIPELINE_PHASE_TYPES = new Set([
+  "data-archon-requirements",
+  "data-archon-patterns",
+  "data-archon-wave1",
+  "data-archon-wave2",
+  "data-archon-validator",
+]);
 
-  const hasSchema = data.output?.parts.some((p) => p.type === "text") ?? false;
-
-  return (
-    <ChainOfThought
-      defaultOpen={isStreaming}
-      open={isStreaming ? true : undefined}
-      isStreaming={isStreaming}
-    >
-      <ChainOfThoughtHeader>
-        {isComplete ? "Requirements extracted" : "Extracting requirements…"}
-      </ChainOfThoughtHeader>
-      <ChainOfThoughtContent>
-        {isComplete && hasSchema ? (
-          <ChainOfThoughtStep
-            icon={CheckCircleIcon}
-            label="Requirements schema ready"
-            status="complete"
-          />
-        ) : (
-          <ChainOfThoughtStep
-            icon={FileTextIcon}
-            label="Analysing system description…"
-            status={isStreaming ? "active" : "pending"}
-          />
-        )}
-      </ChainOfThoughtContent>
-    </ChainOfThought>
-  );
+function patternNameFromPath(rawPath: string): string {
+  return rawPath
+    .replace("data/patterns/", "")
+    .replace(".md", "")
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
-// ─── Pattern phase renderer ───────────────────────────────────────────────────
+// ─── Merged pipeline progress (all 5 phases in one Task) ─────────────────────
 
-function PatternAgentProgress({
-  nestedMessage,
-  isStreaming,
+function PipelineProgress({
+  requirements,
+  patterns,
+  wave1,
+  wave2,
+  validator,
+  isMessageStreaming,
 }: {
-  nestedMessage: PatternAgentUIMessage;
-  isStreaming: boolean;
+  requirements?: RequirementsData;
+  patterns?: PatternsData;
+  wave1?: Wave1Data;
+  wave2?: Wave2Data;
+  validator?: ValidatorData;
+  isMessageStreaming: boolean;
 }) {
-  const parts = nestedMessage.parts ?? [];
+  const allDone =
+    requirements?.state === "complete" &&
+    patterns?.state === "complete" &&
+    wave1?.complete === true &&
+    wave2?.complete === true &&
+    validator?.state === "complete";
+  const isRunning = isMessageStreaming || !allDone;
 
-  const readFilesPart = parts.find((p) => p.type === "tool-read_files") as
-    | Extract<
-        PatternAgentUIMessage["parts"][number],
-        { type: "tool-read_files" }
-      >
-    | undefined;
+  // Pattern file paths extracted from the nested agent message
+  const patternPaths = (() => {
+    if (!patterns?.output) return [] as string[];
+    const msg = patterns.output as PatternAgentUIMessage;
+    const readPart = msg.parts?.find((p) => p.type === "tool-read_files") as
+      | { input?: { paths?: string[] } }
+      | undefined;
+    return readPart?.input?.paths ?? [];
+  })();
 
-  const paths = (readFilesPart?.input as { paths?: string[] })?.paths ?? [];
+  // Wave outputs (strip the `complete` flag key)
+  const wave1Output: WaveOutput = wave1
+    ? (Object.fromEntries(
+        Object.entries(wave1).filter(([k]) => k !== "complete"),
+      ) as WaveOutput)
+    : {};
+  const wave2Output: WaveOutput = wave2
+    ? (Object.fromEntries(
+        Object.entries(wave2).filter(([k]) => k !== "complete"),
+      ) as WaveOutput)
+    : {};
 
-  function patternNameFromPath(rawPath: string): string {
-    return rawPath
-      .replace("data/patterns/", "")
-      .replace(".md", "")
-      .split("-")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-  }
-
-  return (
-    <ChainOfThoughtContent>
-      {paths.map((rawPath, i) => (
-        <ChainOfThoughtStep
-          key={`read-${i}`}
-          icon={FileTextIcon}
-          label={patternNameFromPath(rawPath)}
-          status="complete"
-        />
-      ))}
-      {isStreaming ? (
-        <ChainOfThoughtStep
-          icon={FileTextIcon}
-          label="Reading architectural patterns…"
-          status="active"
-        />
-      ) : (
-        <ChainOfThoughtStep
-          icon={CheckCircleIcon}
-          label="Patterns selected"
-          status="complete"
-        />
-      )}
-    </ChainOfThoughtContent>
-  );
-}
-
-function PatternsPart({ data }: { data: PatternsData }) {
-  const isStreaming = data.state === "streaming";
-  const isComplete = data.state === "complete";
+  const wave1DoneCount = Object.keys(wave1Output).length;
+  const wave2DoneCount = Object.keys(wave2Output).length;
 
   return (
-    <ChainOfThought
-      defaultOpen={isStreaming}
-      open={isStreaming ? true : undefined}
-      isStreaming={isStreaming}
-    >
-      <ChainOfThoughtHeader>
-        {isComplete
-          ? "Architectural patterns selected"
-          : "Selecting architectural patterns…"}
-      </ChainOfThoughtHeader>
-      {data.output ? (
-        <PatternAgentProgress
-          nestedMessage={data.output as PatternAgentUIMessage}
-          isStreaming={isStreaming}
-        />
-      ) : (
-        <ChainOfThoughtContent>
-          <ChainOfThoughtStep
-            icon={FileTextIcon}
-            label="Reading architectural patterns…"
-            status={isStreaming ? "active" : "complete"}
-          />
-        </ChainOfThoughtContent>
-      )}
-    </ChainOfThought>
-  );
-}
-
-// ─── Wave progress renderer ───────────────────────────────────────────────────
-
-function WaveProgress({
-  pillars,
-  waveOutput,
-  isStreaming,
-}: {
-  pillars: CategorySlug[];
-  waveOutput: WaveOutput;
-  isStreaming: boolean;
-}) {
-  const donePillars = pillars.filter((p) => p in waveOutput);
-
-  return (
-    <ChainOfThoughtContent>
-      {donePillars.map((pillar) => {
-        const meta = PILLAR_META[pillar];
-        return (
-          <ChainOfThoughtStep
-            key={pillar}
-            icon={meta.icon}
-            label={meta.label}
-            status="complete"
-          />
-        );
-      })}
-      {isStreaming && (
-        <ChainOfThoughtStep
-          icon={ServerIcon}
-          label="Running specialist agents…"
-          status="active"
-        />
-      )}
-    </ChainOfThoughtContent>
-  );
-}
-
-// ─── Wave 1 renderer ──────────────────────────────────────────────────────────
-
-const WAVE1_PILLARS: CategorySlug[] = [
-  "compute",
-  "storage",
-  "database",
-  "analytics",
-  "ai_ml",
-  "integration_messaging",
-  "migration_hybrid",
-  "other",
-];
-
-function Wave1Part({ data }: { data: Wave1Data }) {
-  const isComplete = data.complete === true;
-  const isStreaming = !isComplete;
-
-  // Extract just the WaveOutput keys (exclude the `complete` flag)
-  const waveOutput: WaveOutput = Object.fromEntries(
-    Object.entries(data).filter(([k]) => k !== "complete"),
-  ) as WaveOutput;
-
-  const pillarsToShow: CategorySlug[] =
-    isComplete && Object.keys(waveOutput).length > 0
-      ? (Object.keys(waveOutput) as CategorySlug[])
-      : WAVE1_PILLARS;
-
-  const doneCount = Object.keys(waveOutput).length;
-  const totalCount = pillarsToShow.length;
-
-  const headerLabel = isComplete
-    ? `Wave 1 specialists complete (${totalCount}/${totalCount})`
-    : doneCount > 0
-      ? `Running Wave 1 specialists… (${doneCount}/${totalCount})`
-      : "Running Wave 1 specialists…";
-
-  return (
-    <ChainOfThought
-      defaultOpen={isStreaming}
-      open={isStreaming ? true : undefined}
-      isStreaming={isStreaming}
-    >
-      <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
-      {doneCount === 0 && isStreaming ? (
-        <ChainOfThoughtContent>
-          <ChainOfThoughtStep
-            icon={ServerIcon}
-            label="Delegating tasks…"
-            status="active"
-          />
-        </ChainOfThoughtContent>
-      ) : (
-        <WaveProgress
-          pillars={pillarsToShow}
-          waveOutput={waveOutput}
-          isStreaming={isStreaming}
-        />
-      )}
-    </ChainOfThought>
-  );
-}
-
-// ─── Wave 2 renderer ──────────────────────────────────────────────────────────
-
-const WAVE2_PILLARS: CategorySlug[] = [
-  "networking",
-  "devops",
-  "security_identity",
-];
-
-function Wave2Part({ data }: { data: Wave2Data }) {
-  const isComplete = data.complete === true;
-  const isStreaming = !isComplete;
-
-  const waveOutput: WaveOutput = Object.fromEntries(
-    Object.entries(data).filter(([k]) => k !== "complete"),
-  ) as WaveOutput;
-
-  const doneCount = Object.keys(waveOutput).length;
-  const totalCount = WAVE2_PILLARS.length;
-
-  const headerLabel = isComplete
-    ? `Wave 2 specialists complete (${totalCount}/${totalCount})`
-    : doneCount > 0
-      ? `Running Wave 2 specialists… (${doneCount}/${totalCount})`
-      : "Running Wave 2 specialists…";
-
-  return (
-    <ChainOfThought
-      defaultOpen={isStreaming}
-      open={isStreaming ? true : undefined}
-      isStreaming={isStreaming}
-    >
-      <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
-      {doneCount === 0 && isStreaming ? (
-        <ChainOfThoughtContent>
-          <ChainOfThoughtStep
-            icon={NetworkIcon}
-            label="Delegating tasks…"
-            status="active"
-          />
-        </ChainOfThoughtContent>
-      ) : (
-        <WaveProgress
-          pillars={WAVE2_PILLARS}
-          waveOutput={waveOutput}
-          isStreaming={isStreaming}
-        />
-      )}
-    </ChainOfThought>
-  );
-}
-
-// ─── Validator phase renderer ─────────────────────────────────────────────────
-
-function ValidatorPart({ data }: { data: ValidatorData }) {
-  const isStreaming = data.state === "streaming";
-  const isComplete = data.state === "complete";
-
-  return (
-    <ChainOfThought
-      defaultOpen={isStreaming}
-      open={isStreaming ? true : undefined}
-      isStreaming={isStreaming}
-    >
-      <ChainOfThoughtHeader>
-        {isComplete
-          ? "Well-Architected review complete"
-          : "Reviewing against Well-Architected framework…"}
-      </ChainOfThoughtHeader>
-      <ChainOfThoughtContent>
-        {isComplete ? (
-          <ChainOfThoughtStep
-            icon={CheckCircleIcon}
-            label="Architecture validated"
-            status="complete"
-          />
-        ) : (
-          <ChainOfThoughtStep
-            icon={ShieldIcon}
-            label="Validating architecture…"
-            status="active"
-          />
+    <Task defaultOpen>
+      <TaskTrigger
+        title={isRunning ? "Analysing architecture…" : "Analysis complete"}
+      />
+      <TaskContent>
+        {/* Requirements */}
+        {requirements !== undefined && (
+          <TaskItem className="flex items-center gap-1.5">
+            {requirements.state === "streaming" ? (
+              <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+            ) : (
+              <FileTextIcon className="size-3.5 shrink-0" />
+            )}
+            <span
+              className={
+                requirements.state === "streaming" ? "text-foreground" : ""
+              }
+            >
+              {requirements.state === "streaming"
+                ? "Extracting requirements…"
+                : "Requirements extracted"}
+            </span>
+          </TaskItem>
         )}
-      </ChainOfThoughtContent>
-    </ChainOfThought>
+
+        {/* Pattern files read */}
+        {patternPaths.map((rawPath, i) => (
+          <TaskItem key={`pat-${i}`} className="flex items-center gap-1.5">
+            <FileTextIcon className="size-3.5 shrink-0" />
+            <span>{patternNameFromPath(rawPath)}</span>
+          </TaskItem>
+        ))}
+
+        {/* Patterns overall state */}
+        {patterns !== undefined && (
+          <TaskItem className="flex items-center gap-1.5">
+            {patterns.state === "streaming" ? (
+              <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+            ) : (
+              <CheckCircleIcon className="size-3.5 shrink-0" />
+            )}
+            <span
+              className={
+                patterns.state === "streaming" ? "text-foreground" : ""
+              }
+            >
+              {patterns.state === "streaming"
+                ? "Reading architectural patterns…"
+                : "Patterns selected"}
+            </span>
+          </TaskItem>
+        )}
+
+        {/* Wave 1 — completed pillars */}
+        {(Object.keys(wave1Output) as CategorySlug[]).map((pillar) => {
+          const { icon: Icon, label } = PILLAR_META[pillar];
+          return (
+            <TaskItem key={`w1-${pillar}`} className="flex items-center gap-1.5">
+              <Icon className="size-3.5 shrink-0" />
+              <span>{label}</span>
+            </TaskItem>
+          );
+        })}
+
+        {/* Wave 1 — in-progress */}
+        {wave1 !== undefined && !wave1?.complete && (
+          <TaskItem className="flex items-center gap-1.5">
+            <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+            <span className="text-foreground">
+              {wave1DoneCount > 0
+                ? `Specialist agents running… (${wave1DoneCount}/8)`
+                : "Delegating to specialist agents…"}
+            </span>
+          </TaskItem>
+        )}
+
+        {/* Wave 2 — completed pillars */}
+        {(Object.keys(wave2Output) as CategorySlug[]).map((pillar) => {
+          const { icon: Icon, label } = PILLAR_META[pillar];
+          return (
+            <TaskItem key={`w2-${pillar}`} className="flex items-center gap-1.5">
+              <Icon className="size-3.5 shrink-0" />
+              <span>{label}</span>
+            </TaskItem>
+          );
+        })}
+
+        {/* Wave 2 — in-progress */}
+        {wave2 !== undefined && !wave2?.complete && (
+          <TaskItem className="flex items-center gap-1.5">
+            <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+            <span className="text-foreground">
+              {wave2DoneCount > 0
+                ? `Reactive agents running… (${wave2DoneCount}/3)`
+                : "Delegating reactive agents…"}
+            </span>
+          </TaskItem>
+        )}
+
+        {/* Validator */}
+        {validator !== undefined && (
+          <TaskItem className="flex items-center gap-1.5">
+            {validator.state === "streaming" ? (
+              <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin text-primary" />
+            ) : (
+              <ShieldIcon className="size-3.5 shrink-0" />
+            )}
+            <span
+              className={
+                validator.state === "streaming" ? "text-foreground" : ""
+              }
+            >
+              {validator.state === "streaming"
+                ? "Reviewing architecture…"
+                : "Well-Architected review complete"}
+            </span>
+          </TaskItem>
+        )}
+      </TaskContent>
+    </Task>
   );
 }
 
@@ -877,6 +754,41 @@ export function Chat({
                           })
                       : message.parts.map((part, idx) => ({ part, idx }));
 
+                  // True only while this specific message is the active stream.
+                  // Derived from the overall status (not from parts' states) so
+                  // Task headers stay stable between tool calls.
+                  const isThisMessageStreaming =
+                    isStreaming && messageIndex === messages.length - 1;
+
+                  // Collect all five pipeline phase data values upfront so the
+                  // merged PipelineProgress component gets the full picture from
+                  // a single read — mirroring the followup agent pattern.
+                  const pipelinePhaseData =
+                    messageIndex === lastPipelineMessageIndex
+                      ? {
+                          requirements: findLastDataPart<RequirementsData>(
+                            message.parts,
+                            "data-archon-requirements",
+                          ),
+                          patterns: findLastDataPart<PatternsData>(
+                            message.parts,
+                            "data-archon-patterns",
+                          ),
+                          wave1: findLastDataPart<Wave1Data>(
+                            message.parts,
+                            "data-archon-wave1",
+                          ),
+                          wave2: findLastDataPart<Wave2Data>(
+                            message.parts,
+                            "data-archon-wave2",
+                          ),
+                          validator: findLastDataPart<ValidatorData>(
+                            message.parts,
+                            "data-archon-validator",
+                          ),
+                        }
+                      : null;
+
                   // Collect all followup tool parts so FollowupAgentProgress
                   // can receive the complete list in one merged Task block.
                   const followupToolParts =
@@ -886,14 +798,8 @@ export function Chat({
                         ) as FollowupToolPart[])
                       : [];
 
-                  // True only while this specific message is the active stream.
-                  // Derived from the overall status (not from parts' states) so
-                  // the Task header stays stable between tool calls.
-                  const isThisMessageStreaming =
-                    isStreaming && messageIndex === messages.length - 1;
-
-                  // Flag: render the merged component only on the FIRST
-                  // followup tool part encountered in partsToRender.
+                  // Flags: each group renders only on its FIRST matching part.
+                  let pipelineGroupRendered = false;
                   let followupGroupRendered = false;
 
                   return (
@@ -907,52 +813,16 @@ export function Chat({
                           ? `${message.id}-${part.type}`
                           : `${message.id}-${idx}`;
 
-                        // ── Requirements phase ────────────────────────────
-                        if (part.type === "data-archon-requirements") {
+                        // ── Pipeline phases (all 5 merged into one Task) ──
+                        if (PIPELINE_PHASE_TYPES.has(part.type)) {
+                          if (pipelineGroupRendered || !pipelinePhaseData)
+                            return null;
+                          pipelineGroupRendered = true;
                           return (
-                            <RequirementsPart
-                              key={key}
-                              data={part.data as RequirementsData}
-                            />
-                          );
-                        }
-
-                        // ── Pattern phase ─────────────────────────────────
-                        if (part.type === "data-archon-patterns") {
-                          return (
-                            <PatternsPart
-                              key={key}
-                              data={part.data as PatternsData}
-                            />
-                          );
-                        }
-
-                        // ── Wave 1 ────────────────────────────────────────
-                        if (part.type === "data-archon-wave1") {
-                          return (
-                            <Wave1Part
-                              key={key}
-                              data={part.data as Wave1Data}
-                            />
-                          );
-                        }
-
-                        // ── Wave 2 ────────────────────────────────────────
-                        if (part.type === "data-archon-wave2") {
-                          return (
-                            <Wave2Part
-                              key={key}
-                              data={part.data as Wave2Data}
-                            />
-                          );
-                        }
-
-                        // ── Validator ─────────────────────────────────────
-                        if (part.type === "data-archon-validator") {
-                          return (
-                            <ValidatorPart
-                              key={key}
-                              data={part.data as ValidatorData}
+                            <PipelineProgress
+                              key={`${message.id}-pipeline`}
+                              {...pipelinePhaseData}
+                              isMessageStreaming={isThisMessageStreaming}
                             />
                           );
                         }

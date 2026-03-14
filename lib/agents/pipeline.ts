@@ -815,7 +815,7 @@ export function runArchonPipeline({
               model: makeModel(),
               providerOptions: agentProviderOptions,
               tools: mcpTools,
-              stopWhen: stepCountIs(5),
+              stopWhen: stepCountIs(7),
               system: `You are a cloud architect generating a clear, readable infrastructure diagram using the Python diagrams package.
 
 STRICT WORKFLOW — follow in order:
@@ -1189,14 +1189,20 @@ When calling update_architecture:
 // ─── Followup update schema ───────────────────────────────────────────────────
 
 const FollowupServiceItemSchema = z.object({
-  tier: z.enum(["core", "secondary"]).describe(
-    "Whether this is a core (essential) or secondary (enhancing) service.",
-  ),
+  tier: z
+    .enum(["core", "secondary"])
+    .describe(
+      "Whether this is a core (essential) or secondary (enhancing) service.",
+    ),
   provider: z.enum(["AWS", "Azure", "GCP"]),
-  serviceName: z.string().describe("Full official name, e.g. 'Amazon S3' or 'Cloud Run'."),
-  pillarLabel: z.string().describe(
-    "Human-readable pillar name. Use 'Security & Identity' not 'security_identity', 'AI/ML' not 'ai_ml', 'Integration & Messaging' not 'integration_messaging', etc.",
-  ),
+  serviceName: z
+    .string()
+    .describe("Full official name, e.g. 'Amazon S3' or 'Cloud Run'."),
+  pillarLabel: z
+    .string()
+    .describe(
+      "Human-readable pillar name. Use 'Security & Identity' not 'security_identity', 'AI/ML' not 'ai_ml', 'Integration & Messaging' not 'integration_messaging', etc.",
+    ),
   coreTag: z
     .string()
     .nullable()
@@ -1204,9 +1210,11 @@ const FollowupServiceItemSchema = z.object({
     .describe(
       "REQUIRED for core services (tier='core'): a short (≤ 50 chars) plain-English phrase explaining why the app CANNOT function without this service. Everyday language only — not technical jargon. Example: 'Runs all the app backend API logic'. Example: 'Stores every video and user file'. MUST be null for secondary services (tier='secondary').",
     ),
-  description: z.string().describe(
-    "App-tailored description starting with the service name. Explain what this service does in this specific application. Core ≤ 300 chars, secondary ≤ 150 chars.",
-  ),
+  description: z
+    .string()
+    .describe(
+      "App-tailored description starting with the service name. Explain what this service does in this specific application. Core ≤ 300 chars, secondary ≤ 150 chars.",
+    ),
 });
 
 const FollowupUpdateSchema = z.object({
@@ -1335,15 +1343,24 @@ export function runFollowup({
         for (let i = msgs.length - 1; i >= 0; i--) {
           const m = msgs[i];
           if (m.role !== "assistant") continue;
-          const part = m.parts.findLast((p) => p.type === "data-archon-services");
+          const part = m.parts.findLast(
+            (p) => p.type === "data-archon-services",
+          );
           if (part && "data" in part) {
             const d = part.data as {
               state: string;
               coreServices?: ServiceCard[];
               secondaryServices?: ServiceCard[];
             };
-            if (d.state === "complete" && d.coreServices && d.secondaryServices) {
-              return { coreServices: d.coreServices, secondaryServices: d.secondaryServices };
+            if (
+              d.state === "complete" &&
+              d.coreServices &&
+              d.secondaryServices
+            ) {
+              return {
+                coreServices: d.coreServices,
+                secondaryServices: d.secondaryServices,
+              };
             }
           }
         }
@@ -1355,7 +1372,9 @@ export function runFollowup({
         for (let i = msgs.length - 1; i >= 0; i--) {
           const m = msgs[i];
           if (m.role !== "assistant") continue;
-          const part = m.parts.findLast((p) => p.type === "data-archon-diagram");
+          const part = m.parts.findLast(
+            (p) => p.type === "data-archon-diagram",
+          );
           if (part && "data" in part) {
             const d = part.data as { state: string; diagramCode?: string };
             if (d.state === "complete" && d.diagramCode) return d.diagramCode;
@@ -1488,7 +1507,9 @@ export function runFollowup({
                 .sort();
               return { pillar, files: slugs };
             } catch {
-              return { error: `Pillar '${pillar}' not found for provider '${provider}'.` };
+              return {
+                error: `Pillar '${pillar}' not found for provider '${provider}'.`,
+              };
             }
           }
 
@@ -1567,7 +1588,11 @@ export function runFollowup({
           "Call this when the user explicitly requests a service change or architectural modification. " +
           "Provide the COMPLETE updated services list (not just the changed items) and a short description of the updated architecture for diagram generation.",
         inputSchema: FollowupUpdateSchema,
-        execute: async ({ coreServices, secondaryServices, synthesisContext }) => {
+        execute: async ({
+          coreServices,
+          secondaryServices,
+          synthesisContext,
+        }) => {
           // Emit generating state for both panels immediately
           writer.write({
             type: "data-archon-diagram",
@@ -1704,7 +1729,7 @@ export function runFollowup({
               model: makeModel(),
               providerOptions: agentProviderOptions,
               tools: mcpTools,
-              stopWhen: stepCountIs(5),
+              stopWhen: stepCountIs(7),
               system: buildFollowupDiagramSystem(diagramOutputDir),
               prompt: diagramPrompt,
               abortSignal,
@@ -1768,8 +1793,7 @@ export function runFollowup({
               id: "phase-diagram",
               data: {
                 state: "error",
-                error:
-                  err instanceof Error ? err.message : String(err),
+                error: err instanceof Error ? err.message : String(err),
               },
             });
           } finally {
