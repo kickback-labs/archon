@@ -1,7 +1,7 @@
 "use client";
 
+import Image from "next/image";
 import { LoginForm } from "@/components/login-form";
-import { BotIcon } from "lucide-react";
 import Link from "next/link";
 
 export default function LoginPage() {
@@ -10,8 +10,14 @@ export default function LoginPage() {
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex justify-center gap-2 md:justify-start">
           <Link href="/" className="flex items-center gap-2 font-medium">
-            <div className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <BotIcon className="size-4" />
+            <div className="size-6 shrink-0 overflow-hidden rounded-full">
+              <Image
+                src="/archon-logo.png"
+                alt="Archon"
+                width={96}
+                height={96}
+                className="size-6 scale-[2.75] object-contain"
+              />
             </div>
             Archon
           </Link>
