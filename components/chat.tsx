@@ -527,8 +527,8 @@ function useCurrentPhase(messages: ArchonAgentUIMessage[]): string | null {
         if (!d.complete) {
           const done = Object.keys(d).filter((k) => k !== "complete").length;
           return done > 0
-            ? `Core specialist agents running… (${done - 1} done)`
-            : "Core specialist agents running…";
+            ? `Core specialist agents running (${done - 1} done)`
+            : "Core specialist agents running";
         }
       }
       if (part.type === "data-archon-wave2") {
@@ -536,8 +536,8 @@ function useCurrentPhase(messages: ArchonAgentUIMessage[]): string | null {
         if (!d.complete) {
           const done = Object.keys(d).filter((k) => k !== "complete").length;
           return done > 0
-            ? `Reactive specialist agents running… (${done} done)`
-            : "Reactive specialist agents running…";
+            ? `Reactive specialist agents running (${done} done)`
+            : "Reactive specialist agents running";
         }
       }
       if (part.type === "data-archon-validator") {
