@@ -16,19 +16,19 @@ import {
 import {
   PromptInput,
   PromptInputBody,
+  PromptInputButton,
   PromptInputFooter,
+  PromptInputProvider,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
-  PromptInputActionMenu,
-  PromptInputActionMenuTrigger,
-  PromptInputActionMenuContent,
-  PromptInputActionAddAttachments,
   type PromptInputMessage,
   usePromptInputAttachments,
+  useProviderAttachments,
 } from "@/components/ai-elements/prompt-input";
 import {
   Attachment,
+  AttachmentInfo,
   AttachmentPreview,
   AttachmentRemove,
   Attachments,
@@ -61,6 +61,7 @@ import {
   MessageSquareIcon,
   MonitorIcon,
   NetworkIcon,
+  PaperclipIcon,
   RefreshCcwIcon,
   ServerIcon,
   ShieldIcon,
@@ -112,7 +113,7 @@ function findLastDataPart<T>(
 // ─── Attachment display ───────────────────────────────────────────────────────
 
 const AttachmentsDisplay = () => {
-  const attachments = usePromptInputAttachments();
+  const attachments = useProviderAttachments();
   if (attachments.files.length === 0) return null;
 
   return (
@@ -124,6 +125,7 @@ const AttachmentsDisplay = () => {
           onRemove={() => attachments.remove(attachment.id)}
         >
           <AttachmentPreview />
+          <AttachmentInfo />
           <AttachmentRemove />
         </Attachment>
       ))}
@@ -137,8 +139,7 @@ function RequirementsPart({ data }: { data: RequirementsData }) {
   const isStreaming = data.state === "streaming";
   const isComplete = data.state === "complete";
 
-  const hasSchema =
-    data.output?.parts.some((p) => p.type === "text") ?? false;
+  const hasSchema = data.output?.parts.some((p) => p.type === "text") ?? false;
 
   return (
     <ChainOfThought
@@ -179,10 +180,11 @@ function PatternAgentProgress({
 }) {
   const parts = nestedMessage.parts ?? [];
 
-  const readFilesPart = parts.find(
-    (p) => p.type === "tool-read_files",
-  ) as
-    | Extract<PatternAgentUIMessage["parts"][number], { type: "tool-read_files" }>
+  const readFilesPart = parts.find((p) => p.type === "tool-read_files") as
+    | Extract<
+        PatternAgentUIMessage["parts"][number],
+        { type: "tool-read_files" }
+      >
     | undefined;
 
   const paths = (readFilesPart?.input as { paths?: string[] })?.paths ?? [];
@@ -442,6 +444,20 @@ function ValidatorPart({ data }: { data: ValidatorData }) {
   );
 }
 
+// ─── Attach PDF button ────────────────────────────────────────────────────────
+
+function AttachPDFButton() {
+  const attachments = usePromptInputAttachments();
+  return (
+    <PromptInputButton
+      tooltip="Attach PDF"
+      onClick={() => attachments.openFileDialog()}
+    >
+      <PaperclipIcon className="size-4" />
+    </PromptInputButton>
+  );
+}
+
 // ─── Main Chat component ──────────────────────────────────────────────────────
 
 /** Detect the current active phase label from the last assistant message parts. */
@@ -522,7 +538,12 @@ interface ChatProps {
   onServicesChange?: (services: ServicesPanelState | null) => void;
 }
 
-export function Chat({ id, initialMessages, onDiagramChange, onServicesChange }: ChatProps) {
+export function Chat({
+  id,
+  initialMessages,
+  onDiagramChange,
+  onServicesChange,
+}: ChatProps) {
   const [text, setText] = useState("");
   const router = useRouter();
   const refreshedRef = useRef(false);
@@ -576,7 +597,10 @@ export function Chat({ id, initialMessages, onDiagramChange, onServicesChange }:
     } else if (diagramData.state === "complete" && diagramData.imagePath) {
       onDiagramChange({ state: "complete", imagePath: diagramData.imagePath });
     } else if (diagramData.state === "error") {
-      onDiagramChange({ state: "error", error: diagramData.error ?? "Unknown error" });
+      onDiagramChange({
+        state: "error",
+        error: diagramData.error ?? "Unknown error",
+      });
     } else {
       onDiagramChange(null);
     }
@@ -615,7 +639,10 @@ export function Chat({ id, initialMessages, onDiagramChange, onServicesChange }:
         secondaryServices: servicesData.secondaryServices,
       });
     } else if (servicesData.state === "error") {
-      onServicesChange({ state: "error", error: servicesData.error ?? "Unknown error" });
+      onServicesChange({
+        state: "error",
+        error: servicesData.error ?? "Unknown error",
+      });
     } else {
       onServicesChange(null);
     }
@@ -801,6 +828,31 @@ export function Chat({ id, initialMessages, onDiagramChange, onServicesChange }:
                           );
                         }
 
+                        // ── File (PDF) parts ──────────────────────────────
+                        if (part.type === "file") {
+                          return (
+                            <div
+                              key={key}
+                              className="flex w-full ml-auto items-start"
+                            >
+                              <Attachments variant="inline">
+                                <Attachment
+                                  data={{
+                                    type: "file",
+                                    id: key,
+                                    filename: part.filename ?? "document.pdf",
+                                    mediaType: part.mediaType,
+                                    url: part.url,
+                                  }}
+                                >
+                                  <AttachmentPreview />
+                                  <AttachmentInfo />
+                                </Attachment>
+                              </Attachments>
+                            </div>
+                          );
+                        }
+
                         // Skip all other part types
                         return null;
                       })}
@@ -816,33 +868,33 @@ export function Chat({ id, initialMessages, onDiagramChange, onServicesChange }:
         <ConversationScrollButton />
       </Conversation>
 
-      <div className="py-4">
-        <PromptInput onSubmit={handleSubmit} globalDrop multiple>
-          <div className="px-3 pt-2">
-            <AttachmentsDisplay />
-          </div>
-          <PromptInputBody>
-            <PromptInputTextarea
-              value={text}
-              placeholder="Describe a system to architect…"
-              onChange={(e) => setText(e.target.value)}
-            />
-          </PromptInputBody>
-          <PromptInputFooter>
-            <PromptInputTools>
-              <PromptInputActionMenu>
-                <PromptInputActionMenuTrigger />
-                <PromptInputActionMenuContent>
-                  <PromptInputActionAddAttachments />
-                </PromptInputActionMenuContent>
-              </PromptInputActionMenu>
-            </PromptInputTools>
-            <PromptInputSubmit
-              status={status}
-              disabled={!text.trim() && status !== "streaming"}
-            />
-          </PromptInputFooter>
-        </PromptInput>
+      <div className="py-4 flex flex-col gap-2">
+        <PromptInputProvider>
+          <AttachmentsDisplay />
+          <PromptInput
+            onSubmit={handleSubmit}
+            globalDrop
+            multiple
+            accept="application/pdf"
+          >
+            <PromptInputBody>
+              <PromptInputTextarea
+                value={text}
+                placeholder="Describe a system to architect…"
+                onChange={(e) => setText(e.target.value)}
+              />
+            </PromptInputBody>
+            <PromptInputFooter>
+              <PromptInputTools>
+                <AttachPDFButton />
+              </PromptInputTools>
+              <PromptInputSubmit
+                status={status}
+                disabled={!text.trim() && status !== "streaming"}
+              />
+            </PromptInputFooter>
+          </PromptInput>
+        </PromptInputProvider>
       </div>
     </div>
   );

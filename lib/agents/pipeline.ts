@@ -7,6 +7,7 @@ import {
   generateId,
   stepCountIs,
   type UIMessage,
+  type FilePart,
 } from "ai";
 import { z } from "zod";
 import { makeModel, agentProviderOptions } from "./model";
@@ -334,6 +335,30 @@ function extractUserPrompt(uiMessages: UIMessage[]): string {
     .join("\n");
 }
 
+/** Extract file parts (e.g. PDFs) from the latest user message. */
+function extractUserFileParts(uiMessages: UIMessage[]): FilePart[] {
+  const last = [...uiMessages].reverse().find((m) => m.role === "user");
+  if (!last) return [];
+  const parts: FilePart[] = [];
+  for (const p of last.parts) {
+    if (p.type === "file") {
+      // p.url is a data URL: "data:<mediaType>;base64,<b64data>"
+      // FilePart.data must be a plain base64 string, not a data URL.
+      const dataUrlPrefix = `data:${p.mediaType};base64,`;
+      const base64 = p.url.startsWith(dataUrlPrefix)
+        ? p.url.slice(dataUrlPrefix.length)
+        : p.url;
+      parts.push({
+        type: "file" as const,
+        data: base64,
+        mediaType: p.mediaType,
+        ...(p.filename ? { filename: p.filename } : {}),
+      });
+    }
+  }
+  return parts;
+}
+
 /**
  * Format user settings into a context block that can be prepended to prompts.
  * Returns an empty string if settings are null/undefined.
@@ -464,6 +489,7 @@ export function runArchonPipeline({
     >[0]["onFinish"],
     execute: async ({ writer }) => {
       const userPrompt = extractUserPrompt(uiMessages);
+      const userFileParts = extractUserFileParts(uiMessages);
       const settingsContext = formatSettingsContext(userSettings);
 
       // Prepend user settings to the prompt so the requirements agent
@@ -483,10 +509,27 @@ export function runArchonPipeline({
         data: { state: "streaming" },
       });
 
-      const reqResult = await requirementsAgent.stream({
-        prompt: enrichedPrompt,
-        abortSignal,
-      });
+      // When the user attached PDF files, pass them as a structured message
+      // (text + file parts) so the model can read the document content.
+      const reqResult = await requirementsAgent.stream(
+        userFileParts.length > 0
+          ? {
+              messages: [
+                {
+                  role: "user" as const,
+                  content: [
+                    { type: "text" as const, text: enrichedPrompt },
+                    ...userFileParts,
+                  ],
+                },
+              ],
+              abortSignal,
+            }
+          : {
+              prompt: enrichedPrompt,
+              abortSignal,
+            },
+      );
 
       // Forward each incremental snapshot so the UI sees live tool progress.
       const reqMessage =
@@ -1009,14 +1052,40 @@ export function runFollowup({
         : FOLLOWUP_SYSTEM;
 
       const historyMessages = uiMessages
-        .map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.parts
+        .map((m, idx) => {
+          const text = m.parts
             .filter((p) => p.type === "text")
             .map((p) => (p.type === "text" ? p.text : ""))
-            .join("\n"),
-        }))
-        .filter((m) => m.content.trim().length > 0);
+            .join("\n");
+
+          // For the last user message, include any attached file parts (e.g. PDFs).
+          const isLastUserMessage =
+            m.role === "user" &&
+            idx === uiMessages.length - 1;
+
+          if (isLastUserMessage && m.role === "user") {
+            const fileParts = extractUserFileParts([m]);
+            if (fileParts.length > 0) {
+              return {
+                role: "user" as const,
+                content: [
+                  { type: "text" as const, text },
+                  ...fileParts,
+                ],
+              };
+            }
+          }
+
+          return {
+            role: m.role as "user" | "assistant",
+            content: text,
+          };
+        })
+        .filter((m) =>
+          typeof m.content === "string"
+            ? m.content.trim().length > 0
+            : m.content.length > 0,
+        );
 
       const result = streamText({
         model: makeModel(),
