@@ -99,9 +99,14 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Via Docker
 
-You can also run Archon directly via docker. 
+You can also run Archon directly via docker.
 
 Make sure the `.env` file is configured:
+
+```bash
+cp .env.example .env
+```
+
 - `OPENAI_API_KEY` — API key for [OpenAI](https://openai.com)
 - `DATABASE_URL` — Ignore this, will be configured automatically
 - `BETTER_AUTH_SECRET` — Random secret used to sign auth tokens. You can use [this](https://www.hexhero.com/tools/random-key-generator) website, or run:
