@@ -785,9 +785,9 @@ export function Chat({
                   }}
                 >
                   {[
-                    "Create a food delivery app like Uber Eats on AWS",
-                    "Create a collaborative document editor like Notion on Azure",
-                    "Create a real-time chat app like Slack on GCP",
+                    "Create a food delivery app like Uber Eats",
+                    "Create a collaborative document editor like Notion",
+                    "Create a real-time chat app like Slack",
                   ].map((suggestion) => (
                     <motion.button
                       key={suggestion}
