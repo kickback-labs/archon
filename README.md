@@ -21,10 +21,11 @@ The greated AI cloud architect, so you can _kickback_ and relax.
   - Phase 4: Creates a final response, taking into account all of the specialist agent's output
   - Phase 5: Generates Diagram via an MCP server
 - Overview of the main pipeline:
-![AI Cloud Architect Pipeline](docs/assets/ai_cloud_architect_pipeline.png | width=200)
+<img src="docs/assets/ai_cloud_architect_pipeline.png" alt="AI Cloud Architect Pipeline" width="200">
 
 - When the user wants to ask a follow-up question, it follows a different pipeline:
-![AI Cloud Architect Pipeline Followup](docs/assets/ai_cloud_architect_pipeline_followup.png | width=200)
+<img src="docs/assets/ai_cloud_architect_pipeline_followup.png" alt="AI Cloud Architect Pipeline Followup" width="200">
+
 
 ## Prerequisites
 
