@@ -16,6 +16,7 @@ out
 opencode.json
 skills-lock.json
 *.md
+!data/**/*.md
 
 # Env files (secrets must not be baked into the image)
 .env

@@ -251,22 +251,27 @@ export function runFollowup({
       }
 
       const previouslyReadDocs = extractPreviouslyReadDocs(uiMessages);
-      let docsCacheSection = "";
-      if (previouslyReadDocs.size > 0) {
-        const docsSections = [...previouslyReadDocs.entries()]
-          .map(([docPath, content]) => `### ${docPath}\n\n${content}`)
-          .join("\n\n---\n\n");
-        docsCacheSection = [
-          "",
-          "",
-          "## Previously Read Service Documentation",
-          "",
-          "The following documentation was already read earlier in this conversation.",
-          "Do NOT call read_service_doc or list_service_docs for these paths again — treat the content below as authoritative and use it directly.",
-          "",
-          docsSections,
-        ].join("\n");
-      }
+      const docsSections =
+        previouslyReadDocs.size > 0
+          ? [...previouslyReadDocs.entries()]
+              .map(([docPath, content]) => `### ${docPath}\n\n${content}`)
+              .join("\n\n---\n\n")
+          : "NONE. No service docs are cached yet in this conversation.\n\nIf the user mentions a specific cloud service and you need service-specific facts, you must first call find_service_doc and then read_service_doc before answering. Do not answer from memory.";
+
+      const docsCacheSection = [
+        "",
+        "",
+        "## Previously Read Service Documentation",
+        "",
+        previouslyReadDocs.size > 0
+          ? "The following documentation was already read earlier in this conversation."
+          : "This section is intentionally present even when empty so you cannot skip the missing-doc check.",
+        previouslyReadDocs.size > 0
+          ? "Do NOT call read_service_doc or list_service_docs for these paths again — treat the content below as authoritative and use it directly."
+          : "When this section says NONE, the answer to the mandatory cache check is NO for any service-specific question unless and until you read the needed docs.",
+        "",
+        docsSections,
+      ].join("\n");
 
       const followupSystem =
         baseSystem + architectureContext + diagramContext + docsCacheSection;
@@ -306,7 +311,9 @@ export function runFollowup({
       const listServiceDocsTool = tool({
         description:
           "List available service documentation files for a given cloud provider and optional pillar. " +
-          "Call this to discover which service slugs exist before calling read_service_doc.",
+          "Use this for broad discovery questions about what services are available in a provider or pillar, " +
+          "such as asking for other useful compute, storage, database, or analytics options. " +
+          "Call this before read_service_doc when the user is browsing rather than naming one exact service.",
         inputSchema: z.object({
           provider: z
             .enum(["aws", "azure", "gcp"])
@@ -378,7 +385,9 @@ export function runFollowup({
         description:
           "Search for a service documentation file by keyword across ALL pillars for a given provider. " +
           "Use this when you need to locate a doc that is NOT already in the 'Previously Read Service " +
-          "Documentation' system prompt section. If the doc is already there, do NOT call this tool.",
+          "Documentation' system prompt section and the user has named a specific service. " +
+          "If the user is asking a broad discovery question about what else is available, prefer list_service_docs instead. " +
+          "If the doc is already there, do NOT call this tool.",
         inputSchema: z.object({
           provider: z
             .enum(["aws", "azure", "gcp"])

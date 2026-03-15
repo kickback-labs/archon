@@ -27,12 +27,18 @@ export async function classifyIntent(
   abortSignal?: AbortSignal,
 ): Promise<"pipeline" | "followup"> {
   const hasPriorArchitecture = conversationHistory.some(
-    (m) => m.role === "assistant",
+    (m) =>
+      m.role === "assistant" &&
+      m.parts.some(
+        (part) =>
+          part.type === "data-archon-services" ||
+          part.type === "data-archon-diagram",
+      ),
   );
 
   const contextNote = hasPriorArchitecture
-    ? "There is prior architecture output in this conversation."
-    : "This is the first message in the conversation.";
+    ? "There is prior architecture output in this conversation. Edits to that existing design should normally be classified as followup, not pipeline."
+    : "There is no prior architecture output in this conversation yet.";
 
   const { output } = await generateText({
     model: makeModel(),

@@ -8,7 +8,7 @@ import { wrapLanguageModel, type LanguageModel } from "ai";
 export const MODEL_ID = "gpt-5.1";
 
 export const REASONING_EFFORT: OpenAILanguageModelResponsesOptions["reasoningEffort"] =
-  "none";
+  "low";
 
 export const agentProviderOptions = {
   openai: {

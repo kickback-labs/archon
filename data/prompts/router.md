@@ -6,4 +6,16 @@ Classify the user's message as exactly one of:
 
 {{CONTEXT_NOTE}}
 
+## Priority rules
+
+1. If there is already architecture output in the conversation, and the user is asking to modify that existing architecture, classify as **"followup"**.
+2. "Modify" includes add, remove, swap, replace, migrate, upgrade, downgrade, split, merge, or reconfigure services in the current design.
+3. Requests like "use X instead", "replace Y with Z", "move this to GCP", "change the database", "add caching", "remove Kafka", "what if we used Lambda instead", and "update the current architecture" are all **"followup"**.
+4. Even if the requested change is significant, keep it as **"followup"** when the user is iterating on the current architecture rather than asking for a brand-new design from scratch.
+5. Only classify as **"pipeline"** when the user is asking for a fresh architecture for a new problem, or explicitly wants to discard the current design and start over.
+
+## Tie-breaker
+
+When uncertain, prefer **"followup"** over **"pipeline"** if the conversation already contains architecture output.
+
 Respond with the JSON object only.
