@@ -8,10 +8,14 @@ The greated AI cloud architect, so you can _kickback_ and relax.
 - Finds the best services from AWS, Azure and GCP using RAG
 - Validates the architecture against the _well-architected_ framework
 - Generates Diagrams via an MCP server
-- Fully responsive UI, and with user authentication
+- Fully responsive UI
+- User authentication baked in via Better-Auth
+
+## Demo video
+You can see a demo video [here](https://youtu.be/s37cBCvhmPw)
 
 ## Architecture
-- We first gathered data from all 3 cloud providers, and assigned labels _tiers_ to them (T1/T2/T3)
+- We first gathered data from all 3 cloud providers, and assigned _tiers_ to them (T1/T2/T3)
 - During _Phase 2_, we perform RAG only on T2 and T3 docs. T1 docs are _always_ injected into the context, since they are foundational/common services
 - The pipeline does the following in order:
   - Phase 0: Gathers app requirements
