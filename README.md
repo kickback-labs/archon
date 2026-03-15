@@ -1,6 +1,30 @@
 # Archon
 
-A cloud architect AI agent chatbot built with Next.js, TypeScript, and the Vercel AI SDK.
+The greated AI cloud architect, so you can _kickback_ and relax.
+
+## Features
+- Simplifies process of designing cloud architectures
+- Picks architectural patterns
+- Finds the best services from AWS, Azure and GCP using RAG
+- Validates the architecture against the _well-architected_ framework
+- Generates Diagrams via an MCP server
+- Fully responsive UI, and with user authentication
+
+## Architecture
+- We first gathered data from all 3 cloud providers, and assigned labels _tiers_ to them (T1/T2/T3)
+- During _Phase 2_, we perform RAG only on T2 and T3 docs. T1 docs are _always_ injected into the context, since they are foundational/common services
+- The pipeline does the following in order:
+  - Phase 0: Gathers app requirements
+  - Phase 1: Finds best architectural patterns
+  - Phase 2: Finds best services from AWS, Azure and GCP in parallel (split into 2 waves, since _networking_, _devops_ and _security_ depend on wave 1's output)
+  - Phase 3: Validates the architecture using the _well-architected_ framework
+  - Phase 4: Creates a final response, taking into account all of the specialist agent's output
+  - Phase 5: Generates Diagram via an MCP server
+- Overview of the main pipeline:
+![AI Cloud Architect Pipeline](docs/assets/ai_cloud_architect_pipeline.png | width=200)
+
+- When the user wants to ask a follow-up question, it follows a different pipeline:
+![AI Cloud Architect Pipeline Followup](docs/assets/ai_cloud_architect_pipeline_followup.png | width=200)
 
 ## Prerequisites
 
@@ -36,7 +60,7 @@ Fill in the following values:
 
 - `OPENAI_API_KEY` — API key for [OpenAI](https://openai.com)
 - `DATABASE_URL` — PostgreSQL connection string, e.g. `postgres://user:password@localhost:5432/archon`
-- `BETTER_AUTH_SECRET` — Random secret used to sign auth tokens. Generate one with:
+- `BETTER_AUTH_SECRET` — Random secret used to sign auth tokens. You can use [this](https://www.hexhero.com/tools/random-key-generator) website, or run:
 
 ```bash
 openssl rand -base64 32
@@ -70,9 +94,18 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Via Docker
 
-You can also run Archon instantly via docker. 
+You can also run Archon directly via docker. 
 
-Make sure the `.env` file is configured, then run:
+Make sure the `.env` file is configured:
+- `OPENAI_API_KEY` — API key for [OpenAI](https://openai.com)
+- `DATABASE_URL` — Ignore this, will be configured automatically
+- `BETTER_AUTH_SECRET` — Random secret used to sign auth tokens. You can use [this](https://www.hexhero.com/tools/random-key-generator) website, or run:
+
+```bash
+openssl rand -base64 32
+```
+
+then run:
 
 ```bash
 docker compose build

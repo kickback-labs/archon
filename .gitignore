@@ -44,3 +44,9 @@ next-env.d.ts
 opencode.json
 .devtools
 .cursor
+.cursorignore
+skills-lock.json
+STRATEGY.md
+.agents/skills
+.qodo
+.ruff_cache
